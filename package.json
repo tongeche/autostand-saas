@@ -1,0 +1,13 @@
+{
+  "name": "autostand-v2",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "web:dev": "pnpm -C apps/web dev",
+    "web:build": "pnpm -C apps/web build",
+    "web:preview": "pnpm -C apps/web preview"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

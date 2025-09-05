@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+:root{
+  /* Palette */
+  --color-primary:#2e6b4a;  /* deep green */
+  --color-primary-600:#24563b;
+  --color-accent:#b7e0c3;   /* mint */
+  --color-surface:#f3f5f6;  /* app bg */
+  --color-surface-2:#ffffff;
+
+  /* Effects */
+  --radius:16px;
+  --shadow-soft: 0 8px 24px rgba(16,24,40,.06);
+  --shadow-card: 0 6px 20px rgba(22, 60, 48, .08);
+  --glass-white: rgba(255,255,255,.75);
+  --glass-border: rgba(16,24,40,.08);
+}
+
+/* Utilities mapped to vars (Tailwind v4 is fine with @apply) */
+.bg-surface   { background: var(--color-surface); }
+.text-primary { color: var(--color-primary); }
+.bg-primary   { background: var(--color-primary); }
+.bg-accent    { background: var(--color-accent); }
+
+.card {
+  background: var(--glass-white);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+/* App chrome */
+.app-shell {
+  background:
+    radial-gradient(1200px 600px at -10% -10%, rgba(183,224,195,.35), transparent 50%),
+    radial-gradient(1000px 500px at 110% -20%, rgba(46,107,74,.10), transparent 55%),
+    var(--color-surface);
+}
+
+.sidebar {
+  background:
+    linear-gradient(180deg, rgba(183,224,195,.65) 0%, rgba(183,224,195,.20) 24%, rgba(255,255,255,.85) 100%),
+    #ffffff;
+  border-right: 1px solid var(--glass-border);
+  backdrop-filter: blur(6px);
+}
+
+.topbar {
+  background: rgba(255,255,255,.86);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.badge {
+  border-radius: 999px;
+  background: var(--color-primary);
+  color:#fff;
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Icon button + inputs */
+.icon-btn {
+  border: 1px solid var(--glass-border);
+  background: #fff;
+  border-radius: 12px;
+  padding: 6px 10px;
+}
+.input {
+  border:1px solid var(--glass-border);
+  background:#fff;
+  border-radius:12px;
+  padding:10px 12px;
+}
+
+/* Mobile helpers */
+.mobile-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.35);
+  backdrop-filter: blur(2px);
+}
+.lock-scroll { overflow: hidden; }
+.safe { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }

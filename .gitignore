@@ -1,0 +1,27 @@
+# Node & build artifacts
+node_modules/
+.pnpm-store/
+dist/
+.cache/
+*.log
+pnpm-debug.log*
+
+# Env (never commit)
+.env
+.env.*
+apps/web/.env.local
+apps/api/.env.local
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Netlify/Parcel/Vite
+.netlify/
+.parcel-cache/
+*.tsbuildinfo
+
+# Coverage
+coverage/

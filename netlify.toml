@@ -1,0 +1,23 @@
+[build]
+  base = ""
+  publish = "apps/web/dist"
+  command = "pnpm -C apps/web build"
+
+[functions]
+  directory = "apps/api/dist"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[dev]
+  functions = "apps/api/dist"
+  command = "pnpm --filter autostand-web-v2 run dev"
+  targetPort = 5173
+  port = 8888

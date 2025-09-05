@@ -1,0 +1,11 @@
+{
+  "name": "autostand-api-v2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsc -w"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}
