@@ -7,14 +7,14 @@
   NODE_VERSION = "20"
   NETLIFY_USE_PNPM = "true"
 
-# SPA routing for React Router
+# functions proxy (if you use them)
+[[redirects]]
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
+
+# SPA routing
 [[redirects]]
   from = "/*"
   to   = "/index.html"
   status = 200
-
-# Cache static assets (optional)
-[[headers]]
-  for = "/assets/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
