@@ -3,7 +3,7 @@ import { supabase } from "../../../lib/supabase";
 import { getTenantId } from "../../../lib/tenant";
 import LeadCard from "../components/LeadCard";
 import LeadDrawer from "../components/LeadDrawer";
-import DemoRespondWizard from "../components/respond_wizard";
+import AddLeadWizard from "../components/AddLeadWizard.jsx";
 import {
   FiRefreshCw,
   FiSearch,
@@ -28,6 +28,7 @@ export default function LeadsPage() {
 
   const [selected, setSelected] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
 
   const offset = page * PAGE_SIZE;
   const pageCount = useMemo(
@@ -154,6 +155,7 @@ export default function LeadsPage() {
           >
             <FiRefreshCw />
           </button>
+          <button className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm" onClick={()=> setAddOpen(true)}>+ Add Lead</button>
         </div>
       </div>
 
@@ -209,6 +211,7 @@ export default function LeadsPage() {
         onClose={closeDrawer}
         onChanged={onChanged}
       />
+      <AddLeadWizard open={addOpen} onClose={()=> setAddOpen(false)} onCreated={()=> load({ resetPage: true })} />
     </div>
   );
 }

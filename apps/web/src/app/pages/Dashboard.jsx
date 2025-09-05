@@ -7,6 +7,9 @@ import {
   FiTarget,
 } from "react-icons/fi"; // + FiTarget
 import { fetchStats } from "../../features/dashboard/stats";
+import { listTenantActivity, listUpcomingTasksTenant } from "../../features/leads/services/supabase";
+import QuickTaskModal from "../../features/todos/components/QuickTaskModal.jsx";
+import { formatShortDate } from "../../features/todos/components/shared";
 
 function Stat({ icon, label, value, right }) {
   return (
@@ -34,7 +37,7 @@ function Panel({ title, action, children }) {
     <div className="card p-3 md:p-4 lg:p-5">
       <div className="flex items-center justify-between mb-3">
         <div className="font-semibold">{title}</div>
-        {action && <button className="icon-btn text-sm">{action}</button>}
+        {action}
       </div>
       <div className="space-y-2">{children}</div>
     </div>
@@ -52,12 +55,15 @@ function ListItem({ text, tag }) {
     </div>
   );
 }
-function Task({ text }) {
+function Task({ text, right }) {
   return (
-    <label className="flex items-center gap-3 rounded-xl border px-3 py-2">
-      <input type="checkbox" className="accent-[var(--color-primary)]" />
-      <span className="text-sm">{text}</span>
-    </label>
+    <div className="flex items-center justify-between rounded-xl border px-3 py-2">
+      <div className="flex items-center gap-3">
+        <input type="checkbox" className="accent-[var(--color-primary)]" disabled />
+        <span className="text-sm">{text}</span>
+      </div>
+      {right}
+    </div>
   );
 }
 
@@ -69,6 +75,9 @@ export default function Dashboard() {
     activities7d: 0,
   });
   const [err, setErr] = useState(null);
+  const [acts, setActs] = useState([]);
+  const [upcoming, setUpcoming] = useState([]);
+  const [quickOpen, setQuickOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -76,11 +85,24 @@ export default function Dashboard() {
         setErr(null);
         const data = await fetchStats();
         setStats(data);
+        const [a, t] = await Promise.all([
+          listTenantActivity({ limit: 8 }),
+          listUpcomingTasksTenant({ limit: 6 }),
+        ]);
+        setActs(a || []);
+        setUpcoming(t || []);
       } catch (e) {
         console.error("Dashboard stats error:", e);
         setErr(e.message || String(e));
       }
     })();
+  }, []);
+
+  // Open Quick Task from topbar plus dropdown
+  useEffect(()=>{
+    const open = () => setQuickOpen(true);
+    window.addEventListener('autostand:open_quick_task', open);
+    return () => window.removeEventListener('autostand:open_quick_task', open);
   }, []);
 
   return (
@@ -123,14 +145,28 @@ export default function Dashboard() {
       {/* Panels (still stubbed; next steps will wire real data) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 lg:gap-5">
         <Panel title="Recent Activities">
-          <ListItem text="Activity feed will pull from audit_logs next." />
+          {acts.length === 0 ? (
+            <ListItem text="No recent activity" />
+          ) : acts.map((ev) => (
+            <ListItem key={ev.id} text={`${ev.type} on lead ${ev.lead_id.slice(0,6)}…`} tag={new Date(ev.created_at).toLocaleTimeString()} />
+          ))}
         </Panel>
-        <Panel title="Tasks" action="+ Add New">
-          <Task text="Wire Leads list/kanban" />
-          <Task text="Wire Inventory grid" />
-          <Task text="Wire Activity feed" />
+        <Panel
+          title="Tasks"
+          action={<button className="rounded-lg px-2 py-1.5 border bg-white text-sm" onClick={()=> setQuickOpen(true)}>+ Add New</button>}
+        >
+          {upcoming.length === 0 ? (
+            <ListItem text="No upcoming tasks" />
+          ) : upcoming.map((t) => (
+            <Task key={t.id} text={t.title || '(untitled)'} right={<span className="text-xs text-slate-600">{t.due_date ? formatShortDate(t.due_date) : '—'}</span>} />
+          ))}
         </Panel>
       </div>
+
+      <QuickTaskModal open={quickOpen} onClose={()=> setQuickOpen(false)} onCreated={()=>{
+        // reload upcoming quickly
+        listUpcomingTasksTenant({ limit: 6 }).then(setUpcoming).catch(()=>{});
+      }}/>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 [build]
   command   = "pnpm install --frozen-lockfile && pnpm run build"
   publish   = "apps/web/dist"
-  functions = "apps/api/dist"
+  # Point functions to the TypeScript sources; Netlify will transpile/bundle
+  functions = "apps/api/src"
 
 [build.environment]
   NODE_VERSION = "20"

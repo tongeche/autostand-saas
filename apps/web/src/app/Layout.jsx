@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import React, { useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   FiUsers, FiCheckSquare, FiGrid, FiBox, FiSearch, FiMenu,
 } from "react-icons/fi";
+import AddLeadWizard from "../features/leads/components/AddLeadWizard.jsx";
+import QuickTaskModal from "../features/todos/components/QuickTaskModal.jsx";
+import FindAssetModal from "../features/inventory/components/FindAssetModal.jsx";
 
 /** CONFIG */
 const DEBUG = false; // flip to true to see mode/open badges in the topbar
@@ -29,6 +32,7 @@ function useIsDesktop() {
 
 export default function Layout() {
   const isDesktop = useIsDesktop();
+  const navigate = useNavigate();
 
   // Sidebar open state for desktop — default to true only on desktop
   const [open, setOpen] = useState(() =>
@@ -37,6 +41,12 @@ export default function Layout() {
 
   // Mobile drawer open state
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [plusOpen, setPlusOpen] = useState(false);
+  const plusRef = useRef(null);
+  const [addLeadOpen, setAddLeadOpen] = useState(false);
+  const [quickTaskOpen, setQuickTaskOpen] = useState(false);
+  const [quickDefaults, setQuickDefaults] = useState({ title: "", due: null });
+  const [findAssetOpen, setFindAssetOpen] = useState(false);
 
   // When switching to desktop, close mobile drawer but do NOT change sidebar open state
   useEffect(() => {
@@ -53,6 +63,37 @@ export default function Layout() {
     else b.classList.remove("lock-scroll");
     return () => b.classList.remove("lock-scroll");
   }, [isDesktop, mobileOpen]);
+
+  // Close the plus dropdown on outside click / escape
+  useEffect(() => {
+    if (!plusOpen) return;
+    const onDown = (e) => {
+      if (!plusRef.current) return;
+      if (!plusRef.current.contains(e.target)) setPlusOpen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setPlusOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [plusOpen]);
+
+  // global open for Add Lead wizard
+  useEffect(()=>{
+    const fn = () => setAddLeadOpen(true);
+    window.addEventListener('autostand:open_add_lead', fn);
+    return () => window.removeEventListener('autostand:open_add_lead', fn);
+  }, []);
+
+  // global open for Quick Task
+  useEffect(()=>{
+    const fn = (e) => {
+      const d = (e && e.detail) || {};
+      setQuickDefaults({ title: d.title || '', due: d.due || null });
+      setQuickTaskOpen(true);
+    };
+    window.addEventListener('autostand:open_quick_task', fn);
+    return () => window.removeEventListener('autostand:open_quick_task', fn);
+  }, []);
 
   /** Render */
   return (
@@ -112,10 +153,21 @@ export default function Layout() {
                   {isDesktop ? "desktop" : "mobile"} | open:{String(open)}
                 </span>
               )}
-              <button className="icon-btn min-h-[40px]">+</button>
-              <span className="hidden sm:inline badge" style={{ background: "var(--color-primary-600)" }}>
-                V2
-              </span>
+              <div className="relative" ref={plusRef}>
+                <button className="icon-btn min-h-[40px]" onClick={()=> setPlusOpen(v=>!v)}>+</button>
+                {plusOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border z-50">
+                    <MenuItem label="Schedule" onClick={()=>{ setPlusOpen(false); setQuickDefaults({ title: 'Schedule', due: new Date(Date.now()+60*60*1000) }); setQuickTaskOpen(true); }} />
+                    <MenuItem label="Add Task" onClick={()=>{ setPlusOpen(false); setQuickDefaults({ title: '', due: null }); setQuickTaskOpen(true); }} />
+                    <MenuItem label="View Asset" onClick={()=>{ setPlusOpen(false); setFindAssetOpen(true); }} />
+                    <MenuItem label="Add Inventory" onClick={()=>{ setPlusOpen(false); navigate('/inventory?import=1'); }} />
+                    <MenuItem label="Add Lead" onClick={()=>{ setPlusOpen(false); setAddLeadOpen(true); }} />
+                    <MenuItem label="Set Reminder" onClick={()=>{ setPlusOpen(false); setQuickDefaults({ title: 'Reminder', due: new Date(Date.now()+60*60*1000) }); setQuickTaskOpen(true); }} />
+                    <MenuItem label="Calendar" onClick={()=>{ setPlusOpen(false); navigate('/todos?view=timeline'); }} />
+                    <MenuItem label="Send PDF" onClick={()=>{ setPlusOpen(false); navigate('/wall?new=car'); }} />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </header>
@@ -126,8 +178,27 @@ export default function Layout() {
             <Outlet />
           </div>
         </main>
+        {/* Portaled-like modal at layout level */}
+        {/** Lazy import kept simple to avoid Suspense here */}
+        {addLeadOpen && (
+          <AddLeadWizard open={addLeadOpen} onClose={()=> setAddLeadOpen(false)} onCreated={()=>{
+            // optionally navigate to leads or toast
+          }}/>
+        )}
+        {quickTaskOpen && (
+          <QuickTaskModal open={quickTaskOpen} onClose={()=> setQuickTaskOpen(false)} onCreated={()=>{}} defaultTitle={quickDefaults.title} defaultDue={quickDefaults.due} />
+        )}
+        {findAssetOpen && (
+          <FindAssetModal open={findAssetOpen} onClose={()=> setFindAssetOpen(false)} onFind={(q)=>{ setFindAssetOpen(false); navigate(`/inventory?q=${encodeURIComponent(q)}`); }} />
+        )}
       </div>
     </div>
+  );
+}
+
+function MenuItem({ label, onClick }){
+  return (
+    <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={onClick}>{label}</button>
   );
 }
 
@@ -168,7 +239,8 @@ function SidebarNav({ open, onNavigate }) {
         <Item to="/leads" icon={<FiUsers />} label="Leads" open={open} onClick={onNavigate} />
         <Item to="/todos" icon={<FiCheckSquare />} label="Tasks" open={open} onClick={onNavigate} />
         <Item to="/inventory" icon={<FiBox />} label="Inventory" open={open} onClick={onNavigate} />
-        <Item to="/wall" icon={<FiGrid />} label="Sticky Wall" open={open} onClick={onNavigate} />
+        <Item to="/calendar" icon={<FiGrid />} label="Calendar" open={open} onClick={onNavigate} />
+        <Item to="/wall" icon={<FiGrid />} label="Documents" open={open} onClick={onNavigate} />
       </nav>
     </>
   );

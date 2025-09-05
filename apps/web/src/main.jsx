@@ -7,6 +7,10 @@ import Layout from "./app/Layout.jsx";
 import Dashboard from "./app/pages/Dashboard.jsx";
 import Stub from "./app/pages/Stub.jsx"; // keep if you want the simple page for others
 import LeadsPage from "./features/leads/pages/LeadsPage.jsx";
+import TodosPage from "./features/todos/pages/TodosPage.jsx";
+import StickyWallPage from "./features/wall/pages/StickyWallPage.jsx";
+import InventoryPage from "./features/inventory/pages/InventoryPage.jsx";
+import CalendarPage from "./features/calendar/pages/CalendarPage.jsx";
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
@@ -16,9 +20,10 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard"  element={<Dashboard />} />
             <Route path="leads" element={<LeadsPage />} /> 
-            <Route path="todos"      element={<Stub title="Tasks" />} />
-            <Route path="inventory"  element={<Stub title="Inventory" />} />
-            <Route path="wall"       element={<Stub title="Sticky Wall" />} />
+            <Route path="todos"      element={<TodosPage />} />
+            <Route path="inventory"  element={<InventoryPage />} />
+            <Route path="calendar"   element={<CalendarPage />} />
+            <Route path="wall"       element={<StickyWallPage />} />
             <Route path="leads" element={<LeadsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

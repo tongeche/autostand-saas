@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { listTasksByLead, createTask, toggleDone, updateTask, deleteTask } from "../../tasks/services/tasks";
+import { RespondWizard } from "./respond_wizard";
+import TaskWizard from "./TaskWizard";
+import { fetchLeadTasks, createLeadTask, updateLeadTask, toggleLeadTaskDone, deleteLeadTask } from "../services/supabase";
 
 import {
   FiX, FiSave, FiTrash2, FiPlus,
@@ -101,6 +103,10 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
   const [notes, setNotes] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [lastContact, setLastContact] = useState(null);
+  const [respondOpen, setRespondOpen] = useState(false);
+  const [taskFilter, setTaskFilter] = useState('all'); // all | open | overdue
+  const [assignee, setAssignee] = useState('auto');    // auto | owner | assigned | none
+  const [taskWizardOpen, setTaskWizardOpen] = useState(false);
 
   // Load details when opening
   useEffect(() => {
@@ -121,13 +127,15 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
         supabase.from("lead_activity")
           .select("type, created_at").eq("tenant_id", getTenantId()).eq("lead_id", lead.id)
           .in("type", ["call","sms","email"]).order("created_at", { ascending: false }).limit(1),
-        listTasksByLead(lead.id)
+        fetchLeadTasks(lead.id, { onlyOpen: taskFilter === 'open', overdue: taskFilter === 'overdue' })
       ]);
       setNotes(n.error ? [] : (n.data || []));
       if (!a.error && a.data && a.data[0]) setLastContact(new Date(a.data[0].created_at)); else setLastContact(null);
       setTasks(Array.isArray(t) ? t : []);
     })();
-  }, [open, lead]);
+    // default assignee mode when opening lead
+    setAssignee(lead?.owner_id ? 'owner' : (lead?.assignee_id ? 'assigned' : 'auto'));
+  }, [open, lead, taskFilter]);
 
   // esc closes
   useEffect(() => {
@@ -219,7 +227,7 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
   };
 
   const openReminder = () => alert("Reminder setup (todo)");
-  const openSendPDF = () => alert("Send PDF (todo)");
+  const openSendPDF = () => setRespondOpen(true);
   const openSource = () => {
     const href = form?.source;
     if (!href) return;
@@ -278,6 +286,7 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
               <ActionChip icon={<FiExternalLink />} label="Source"       onClick={openSource}   style="primary" />
               <ActionChip icon={<FiFileText />}     label="Notes"        onClick={() => notesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
               <ActionChip icon={<FiFileText />}     label="Send PDF"     onClick={openSendPDF} />
+              <ActionChip icon={<FiClock />}        label="Task"         onClick={()=> setTaskWizardOpen(true)} />
               <ActionChip icon={<FiTag />}          label={`Status: ${(form?.status || "new")}`} onClick={() => {}} />
               <ActionChip icon={<FiTag />}          label={`Plate: ${form?.plate || "—"}`} onClick={() => {
                 if (!form?.plate) return;
@@ -321,40 +330,54 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
             </Section>
           </div>
 
-          {/* Tasks — uses public.tasks services */}
+          {/* Tasks — tenant + lead scoped */}
           <Section icon={<FiClock />} title="Tasks" right={
-            <button
-              className="icon-btn text-xs"
-              onClick={async () => {
-                const title = prompt("Task title:");
-                if (!title) return;
-                try {
-                  setBusy(true);
-                  const t = await createTask(lead.id, { title });
-                  setTasks(prev => [t, ...prev]);
-                  onChanged?.("task_create");
-                } finally { setBusy(false); }
-              }}
-              disabled={busy}
-            >
-              <FiPlus/> Add
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Filter */}
+              <select
+                className="text-xs border rounded px-2 py-1"
+                value={taskFilter}
+                onChange={(e)=> setTaskFilter(e.target.value)}
+                title="Filter tasks"
+              >
+                <option value="all">All</option>
+                <option value="open">Open</option>
+                <option value="overdue">Overdue</option>
+              </select>
+              {/* Assignee selector for new task */}
+              <select
+                className="text-xs border rounded px-2 py-1"
+                value={assignee}
+                onChange={(e)=> setAssignee(e.target.value)}
+                title="Assignee for new tasks"
+              >
+                <option value="auto">Auto</option>
+                {lead?.owner_id ? <option value="owner">Lead Owner</option> : null}
+                {lead?.assignee_id && lead?.assignee_id !== lead?.owner_id ? <option value="assigned">Assigned</option> : null}
+                <option value="none">Unassigned</option>
+              </select>
+              <button className="icon-btn text-xs" onClick={()=> setTaskWizardOpen(true)} disabled={busy}><FiPlus/> Add</button>
+            </div>
           }>
             {(!tasks || tasks.length === 0) ? (
               <div className="text-xs text-slate-500">No tasks yet</div>
             ) : (
               <div className="space-y-2">
                 {tasks.map((t) => (
-                  <div key={t.id} className={`rounded-lg border border-slate-200 p-2 text-sm flex items-center gap-2 ${t.done ? "opacity-70 bg-slate-50" : ""}`}>
+                  <div key={t.id} className={`rounded-lg border border-slate-200 p-2 text-sm flex items-center gap-2 ${t.status === 'done' ? "opacity-70 bg-slate-50" : ""}`}>
                     <input
                       type="checkbox"
                       className="h-4 w-4 rounded border-slate-300"
-                      checked={!!t.done}
+                      checked={t.status === 'done'}
                       onChange={async (e) => {
                         setBusy(true);
                         try {
-                          const updated = await toggleDone(t.id, e.target.checked);
-                          setTasks(prev => prev.map(x => x.id === t.id ? updated : x));
+                          const updated = await toggleLeadTaskDone(t.id, e.target.checked);
+                          if (taskFilter === 'open' && updated.status === 'done') {
+                            setTasks(prev => prev.filter(x => x.id !== t.id));
+                          } else {
+                            setTasks(prev => prev.map(x => x.id === t.id ? updated : x));
+                          }
                         } finally { setBusy(false); }
                       }}
                     />
@@ -366,7 +389,7 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
                         if (next == null || next === t.title) return;
                         setBusy(true);
                         try {
-                          const updated = await updateTask(t.id, { title: next });
+                          const updated = await updateLeadTask(t.id, { title: next });
                           setTasks(prev => prev.map(x => x.id === t.id ? updated : x));
                         } finally { setBusy(false); }
                       }}
@@ -376,13 +399,23 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
                     <input
                       type="datetime-local"
                       className="text-xs border border-slate-200 rounded px-1 py-1"
-                      value={t.due ? toLocalInputValue(t.due) : ""}
+                      value={t.due_date ? toLocalInputValue(t.due_date) : ""}
                       onChange={async (e) => {
                         setBusy(true);
                         try {
                           const iso = e.target.value ? new Date(e.target.value).toISOString() : null;
-                          const updated = await updateTask(t.id, { due: iso });
-                          setTasks(prev => prev.map(x => x.id === t.id ? updated : x));
+                          const updated = await updateLeadTask(t.id, { due_date: iso });
+                          // If overdue filter, re-check membership
+                          if (taskFilter === 'overdue') {
+                            const isOverdue = !!(updated.due_date && updated.status !== 'done' && new Date(updated.due_date) < new Date());
+                            if (!isOverdue) {
+                              setTasks(prev => prev.filter(x => x.id !== t.id));
+                            } else {
+                              setTasks(prev => prev.map(x => x.id === t.id ? updated : x));
+                            }
+                          } else {
+                            setTasks(prev => prev.map(x => x.id === t.id ? updated : x));
+                          }
                         } finally { setBusy(false); }
                       }}
                     />
@@ -392,7 +425,7 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
                         if (!confirm("Delete task?")) return;
                         setBusy(true);
                         try {
-                          await deleteTask(t.id);
+                          await deleteLeadTask(t.id);
                           setTasks(prev => prev.filter(x => x.id !== t.id));
                         } finally { setBusy(false); }
                       }}
@@ -417,6 +450,26 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
           </Section>
         </div>
       </aside>
+      {/* Respond wizard overlay (higher z-index) */}
+      <RespondWizard open={respondOpen} lead={lead} onClose={() => setRespondOpen(false)} />
+      {/* Task wizard overlay */}
+      <TaskWizard
+        open={taskWizardOpen}
+        lead={lead}
+        onClose={()=> setTaskWizardOpen(false)}
+        defaultAssignee={assignee}
+        onCreated={async (t)=>{
+          if (taskFilter === 'overdue') {
+            const fresh = await fetchLeadTasks(lead.id, { onlyOpen: taskFilter==='open', overdue: taskFilter==='overdue' });
+            setTasks(Array.isArray(fresh) ? fresh : []);
+          } else if (taskFilter === 'open' && t.status === 'done') {
+            // shouldn't happen on create, but keep consistent
+          } else {
+            setTasks(prev => [t, ...prev]);
+          }
+          onChanged?.('task_create');
+        }}
+      />
     </div>
   );
 }

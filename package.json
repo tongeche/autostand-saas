@@ -6,7 +6,7 @@
     "scripts": {
       "build:web": "pnpm -C apps/web build",
       "build:api": "pnpm -C apps/api build",
-      "build": "pnpm run build:api && pnpm run build:web"
+      "build": "pnpm run build:api|| true && pnpm run build:web"
     },
   
   "devDependencies": {

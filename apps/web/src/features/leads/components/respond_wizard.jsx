@@ -128,12 +128,13 @@ function generateProposalPdf(ctx, message){
 /***********************
  * RespondWizard (from your spec, slightly adapted to local mocks)
  ***********************/
-function RespondWizard({ open, leadId, initialTab="info", onClose }){
+export function RespondWizard({ open, leadId, lead: providedLead, initialTab="info", onClose }){
   const leads = useLeads();
   const inv = useInventory();
   const todos = useTodos();
 
-  const lead = useMemo(()=> leads.getById?.(leadId) || null, [leads, leadId]);
+  // Prefer provided lead from the app; fallback to mock lookup by id
+  const lead = useMemo(()=> providedLead || leads.getById?.(leadId) || null, [providedLead, leads, leadId]);
   const car = useMemo(()=>{
     if (!lead) return null;
     const byId = inv.getById?.(lead.carId);
