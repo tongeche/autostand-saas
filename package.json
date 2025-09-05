@@ -1,13 +1,14 @@
 {
-  "name": "autostand-v2",
+  "name": "autostand-api-v2",
   "private": true,
-  "workspaces": ["apps/*"],
+  "type": "module",
   "scripts": {
-    "web:dev": "pnpm -C apps/web dev",
-    "web:build": "pnpm -C apps/web build",
-    "web:preview": "pnpm -C apps/web preview"
+    "dev": "netlify dev --functions dist --targetPort 5173 --port 8888",
+    "build": "tsc -p tsconfig.json"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "typescript": "^5.5.4",
+    "@types/node": "^20.12.12",
+    "netlify-cli": "^17.38.1"
   }
 }
