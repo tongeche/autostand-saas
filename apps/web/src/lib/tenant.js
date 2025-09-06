@@ -5,5 +5,9 @@ export function getTenantId() {
       if (fromStore) return fromStore;
     }
   } catch {}
-  return import.meta.env.VITE_DEV_TENANT_ID;
+  // Do NOT fallback to a test tenant in production
+  if (import.meta && import.meta.env && import.meta.env.DEV) {
+    return import.meta.env.VITE_DEV_TENANT_ID || null;
+  }
+  return null;
 }

@@ -96,6 +96,25 @@ export default function Dashboard() {
         setErr(e.message || String(e));
       }
     })();
+    const onOrgChange = () => {
+      (async () => {
+        try {
+          setErr(null);
+          const data = await fetchStats();
+          setStats(data);
+          const [a, t] = await Promise.all([
+            listTenantActivity({ limit: 8 }),
+            listUpcomingTasksTenant({ limit: 6 }),
+          ]);
+          setActs(a || []);
+          setUpcoming(t || []);
+        } catch (e) {
+          setErr(e.message || String(e));
+        }
+      })();
+    };
+    window.addEventListener('org:changed', onOrgChange);
+    return () => window.removeEventListener('org:changed', onOrgChange);
   }, []);
 
   // Open Quick Task from topbar plus dropdown

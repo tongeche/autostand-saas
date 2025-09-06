@@ -6,7 +6,8 @@ const zero = { totalLeads: 0, newLeads: 0, inventory: 0, activities7d: 0, active
 export async function fetchStats() {
   const tenantId = getTenantId();
   if (!supabase) throw new Error("Supabase client not initialised (envs missing?)");
-  if (!tenantId) throw new Error("VITE_DEV_TENANT_ID is missing");
+  // If no tenant yet (first login before org is selected), return zeros
+  if (!tenantId) return zero;
 
   // helper that returns 0 on failure instead of crashing the whole fetch
   async function safeCount(from, filtersFn) {

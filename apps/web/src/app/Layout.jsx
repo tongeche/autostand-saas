@@ -71,7 +71,7 @@ export default function Layout() {
           if (!/\/onboard|\/login|\/signup/.test(path)) navigate('/onboard');
         }
         // Persist current org in localStorage for data filters
-        try { window.localStorage.setItem('org_id', ms[0].org_id); } catch {}
+        try { window.localStorage.setItem('org_id', ms[0].org_id); window.dispatchEvent(new CustomEvent('org:changed', { detail: { orgId: ms[0].org_id } })); } catch {}
       }catch{}
     })();
   }, [session, navigate]);
@@ -251,11 +251,25 @@ export default function Layout() {
                     )}
                   </button>
                   {userMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-lg border z-50">
-                      <div className="px-3 py-2 text-xs text-slate-600 truncate">{profile.email}</div>
-                      <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={()=>{ setUserMenuOpen(false); navigate('/settings'); }}>Settings</button>
-                      <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={()=>{ setUserMenuOpen(false); navigate('/settings'); }}>Manage account</button>
-                      <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={async ()=>{ setUserMenuOpen(false); try{ window.localStorage.removeItem('org_id'); }catch{} await supabase.auth.signOut(); navigate('/login'); }}>Logout</button>
+                    <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border z-50 p-4">
+                      <div className="text-xs text-slate-600 truncate mb-2">{profile.email}</div>
+                      <div className="flex items-center justify-center mb-2">
+                        <div className="h-16 w-16 rounded-full overflow-hidden ring-2 ring-accent">
+                          {profile?.avatar_url ? (
+                            <img src={profile.avatar_url} alt="avatar" className="h-full w-full object-cover"/>
+                          ) : (
+                            <div className="h-full w-full grid place-items-center bg-slate-100 text-slate-600 text-xl">
+                              {(profile.email || 'A').slice(0,1).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-center font-semibold mb-2">Hi{profile.full_name ? `, ${profile.full_name.split(' ')[0]}!` : '!'}</div>
+                      <div className="space-y-1">
+                        <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 text-sm" onClick={()=>{ setUserMenuOpen(false); navigate('/settings'); }}>Settings</button>
+                        <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 text-sm" onClick={()=>{ setUserMenuOpen(false); navigate('/settings'); }}>Manage account</button>
+                        <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 text-sm" onClick={async ()=>{ setUserMenuOpen(false); try{ window.localStorage.removeItem('org_id'); }catch{} await supabase.auth.signOut(); navigate('/login'); }}>Logout</button>
+                      </div>
                     </div>
                   )}
                 </div>

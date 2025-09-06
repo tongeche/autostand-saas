@@ -37,7 +37,7 @@ export default function LandingPage(){
         </div>
       </section>
 
-      {/* Preview panel — replace with a large screenshot image */}
+    
       <section className="px-4 md:px-6 pb-16">
         <div className="max-w-6xl mx-auto rounded-3xl shadow-lg bg-white/80 backdrop-blur p-2 md:p-3">
           <img
