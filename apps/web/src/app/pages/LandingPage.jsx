@@ -4,27 +4,30 @@ import { Link } from 'react-router-dom';
 export default function LandingPage(){
   return (
     <div className="min-h-screen bg-[#eaf5ee]">
-      {/* Top nav */}
-      <nav className="w-full max-w-7xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between">
-        <div className="text-xl md:text-2xl font-bold tracking-tight">Leads<span className="text-primary">+</span></div>
-        <div className="hidden md:flex items-center gap-6 text-sm text-slate-700">
+      {/* Top nav white bar */}
+
+      <div className="bg-white border-b">
+        <nav className="w-full max-w-7xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between">
+          <div className="text-2xl md:text-3xl font-bold tracking-tight">Leads<span className="text-primary">+</span></div>
+          <div className="hidden md:flex items-center gap-6 text-base text-slate-700">
           <a href="#home" className="hover:text-primary">Home</a>
           <a href="#product" className="hover:text-primary">Product</a>
           <a href="#company" className="hover:text-primary">Company</a>
           <a href="#resources" className="hover:text-primary">Resources</a>
           <a href="#contact" className="hover:text-primary">Contact</a>
-        </div>
-        <div className="inline-flex items-center gap-2">
-          <Link to="/login" className="hidden md:inline px-3 py-2 rounded-lg border bg-white text-sm">Log In</Link>
-          <Link to="/signup" className="hidden md:inline px-3 py-2 rounded-lg border bg-white text-sm">Sign Up</Link>
-          <Link to="/signup" className="px-3 py-2 rounded-full bg-[#205e4b] text-white text-sm shadow">Book a demo</Link>
-        </div>
-      </nav>
+          </div>
+          <div className="inline-flex items-center gap-2">
+            <Link to="/login" className="hidden md:inline px-3 py-2 rounded-lg border bg-white text-base">Log In</Link>
+            <Link to="/signup" className="hidden md:inline px-3 py-2 rounded-lg border bg-white text-base">Sign Up</Link>
+            <Link to="/signup" className="px-3 py-2 rounded-full bg-[#205e4b] text-white text-base shadow">Book a demo</Link>
+          </div>
+        </nav>
+      </div>
 
       {/* Hero */}
       <section className="w-full max-w-5xl mx-auto text-center px-4 md:px-6 py-10 md:py-16">
         <div className="text-sm text-[#205e4b] font-medium">From one startup to another</div>
-        <h1 className="mt-2 text-4xl md:text-5xl font-extrabold leading-tight text-[#183d32]">
+        <h1 className="mt-2 text-5xl md:text-6xl font-extrabold leading-tight text-[#183d32]">
           Leads+ gives you a clear view of your pipeline
         </h1>
         <p className="mt-3 text-slate-700 md:text-lg">Less time on admin, more time closing deals. Manage leads, tasks, inventory and documents in one place.</p>
