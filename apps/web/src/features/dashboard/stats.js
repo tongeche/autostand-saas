@@ -33,9 +33,24 @@ export async function fetchStats() {
     q.eq("org_id", orgId).gte("created_at", since30.toISOString())
   );
 
-  // 3) inventory items
-  // inventory items (cars)
-  const inventory = await safeCount("cars", (q) => q.eq("org_id", orgId));
+  // 3) inventory items — depends on business type
+  let businessType = 'cars';
+  try{
+    const { data: s } = await supabase
+      .from('org_settings')
+      .select('business_type')
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (s?.business_type) businessType = s.business_type;
+  }catch{}
+  let inventory = 0;
+  if (businessType === 'general'){
+    // generic inventory items
+    inventory = await safeCount('inventory_items', (q)=> q.eq('org_id', orgId));
+  } else {
+    // cars business
+    inventory = await safeCount('cars', (q)=> q.eq('org_id', orgId));
+  }
 
   // 4) activities in last 7 days — requires audit_logs.created_at
   const since7 = new Date();
