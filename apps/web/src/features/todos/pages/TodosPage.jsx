@@ -9,6 +9,7 @@ import ListView from "../components/ListView.jsx";
 import TimelineView from "../components/TimelineView.jsx";
 
 const PAGE_SIZE = 25;
+const VISIBLE_ROWS = 8; // show at most 8; rest searchable
 const STATUS_OPTIONS = ["all", "open", "overdue", "done"];
 
 export default function TodosPage(){
@@ -18,10 +19,12 @@ export default function TodosPage(){
   const [page, setPage] = useState(0);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("open");
-  const [view, setView] = useState("kanban"); // kanban | table | list | timeline
+  const [view, setView] = useState("timeline"); // kanban | table | list | timeline
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
   const [leadNames, setLeadNames] = useState({});
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [selected, setSelected] = useState(null);
 
   const offset = page * PAGE_SIZE;
   const pageCount = useMemo(()=> Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
@@ -67,27 +70,37 @@ export default function TodosPage(){
 
   const canPrev = page > 0;
   const canNext = offset + PAGE_SIZE < total;
+  const displayRows = useMemo(()=> rows.slice(0, VISIBLE_ROWS), [rows]);
 
   return (
     <div className="space-y-4 p-4">
       {/* Toolbar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="text-xl font-semibold">Tasks</div>
-          <div className="ml-2 inline-flex rounded-xl border bg-white overflow-hidden">
+          {/* View toggle — segmented on desktop, select on mobile */}
+          <div className="hidden sm:inline-flex ml-2 rounded-xl border border-gray-200 bg-white overflow-hidden">
             <button className={`px-3 py-1.5 text-sm ${view==='kanban' ? 'bg-slate-900 text-white' : ''}`} onClick={()=> setView('kanban')}>Kanban</button>
             <button className={`px-3 py-1.5 text-sm ${view==='table' ? 'bg-slate-900 text-white' : ''}`} onClick={()=> setView('table')}>Table</button>
             <button className={`px-3 py-1.5 text-sm ${view==='list' ? 'bg-slate-900 text-white' : ''}`} onClick={()=> setView('list')}>List</button>
             <button className={`px-3 py-1.5 text-sm ${view==='timeline' ? 'bg-slate-900 text-white' : ''}`} onClick={()=> setView('timeline')}>Timeline</button>
           </div>
+          <div className="sm:hidden w-full">
+            <select className="input w-full" value={view} onChange={(e)=> setView(e.target.value)}>
+              <option value="kanban">Kanban</option>
+              <option value="table">Table</option>
+              <option value="list">List</option>
+              <option value="timeline">Timeline</option>
+            </select>
+          </div>
           {loading && (<span className="text-xs text-slate-500 animate-pulse">loading…</span>)}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Search */}
-          <div className="flex items-center gap-2 rounded-xl border px-3 py-2 bg-white">
+          <div className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-white w-full sm:w-auto min-w-0">
             <FiSearch className="text-slate-500" />
             <input
-              className="outline-none text-sm min-w-[180px]"
+              className="outline-none text-sm min-w-0 w-full sm:w-64"
               placeholder="Search tasks…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -95,7 +108,7 @@ export default function TodosPage(){
             />
           </div>
           {/* Status filter */}
-          <div className="flex items-center gap-2 rounded-xl border px-3 py-2 bg-white">
+          <div className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-white">
             <FiFilter className="text-slate-500" />
             <select className="text-sm outline-none bg-transparent" value={status} onChange={(e)=>setStatus(e.target.value)}>
               {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -122,34 +135,34 @@ export default function TodosPage(){
           }}
         />
       ) : (
-        <div className="overflow-auto">
-          <table className="min-w-full border rounded-xl overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm overflow-x-auto">
+          <table className="min-w-full text-sm table-fixed">
             <thead className="bg-slate-50">
               <tr className="text-left text-sm">
-                <th className="px-3 py-2 border-b">Title</th>
-                <th className="px-3 py-2 border-b">Lead</th>
-                <th className="px-3 py-2 border-b">Due</th>
-                <th className="px-3 py-2 border-b">Status</th>
-                <th className="px-3 py-2 border-b">Assignee</th>
-                <th className="px-3 py-2 border-b">Created</th>
+                <th className="px-3 py-2 border-b border-gray-200 w-1/4">Lead</th>
+                <th className="px-3 py-2 border-b border-gray-200 w-2/5">Title</th>
+                <th className="px-3 py-2 border-b border-gray-200 w-1/5">Assignee</th>
+                <th className="px-3 py-2 border-b border-gray-200 w-1/6">Status</th>
               </tr>
             </thead>
             <tbody>
               {(!rows || rows.length===0) ? (
-                <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-500">No tasks</td></tr>
-              ) : rows.map(t => (
-                <tr key={t.id} className="text-sm">
-                  <td className="px-3 py-2 border-b">
-                    <div className="flex items-center gap-2">
-                      {t.status === 'done' ? <FiCheckCircle className="text-green-600"/> : <FiClock className="text-slate-500"/>}
+                <tr><td colSpan={4} className="px-3 py-6 text-center text-sm text-slate-500">No tasks</td></tr>
+              ) : displayRows.map((t) => (
+                <tr key={t.id} className="odd:bg-white even:bg-slate-50 hover:bg-slate-50 cursor-pointer"
+                  onClick={()=> { setSelected(t); setQuickOpen(true); }}
+                  tabIndex={0}
+                  onKeyDown={(e)=> { if (e.key==='Enter'){ setSelected(t); setQuickOpen(true); } }}
+                >
+                  <td className="px-3 py-2 border-t border-gray-200 align-top break-words whitespace-normal">{leadNames[t.lead_id]?.name || t.lead_id}</td>
+                  <td className="px-3 py-2 border-t border-gray-200 align-top break-words whitespace-normal">
+                    <div className="flex items-start gap-2">
+                      {t.status === 'done' ? <FiCheckCircle className="text-green-600 mt-0.5"/> : <FiClock className="text-slate-500 mt-0.5"/>}
                       <span className={t.status==='done' ? 'line-through text-slate-500' : ''}>{t.title || '(untitled)'}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-2 border-b">{leadNames[t.lead_id]?.name || t.lead_id}</td>
-                  <td className="px-3 py-2 border-b">{t.due_date ? new Date(t.due_date).toLocaleString() : '—'}</td>
-                  <td className="px-3 py-2 border-b"><span className={`rounded-full px-2 py-1 text-xs ${t.status==='done' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{t.status || 'open'}</span></td>
-                  <td className="px-3 py-2 border-b">{t.assignee_id || '—'}</td>
-                  <td className="px-3 py-2 border-b">{t.created_at ? new Date(t.created_at).toLocaleString() : '—'}</td>
+                  <td className="px-3 py-2 border-t border-gray-200 align-top break-words whitespace-normal">{t.assignee_id || '—'}</td>
+                  <td className="px-3 py-2 border-t border-gray-200 align-top"><span className={`rounded-full px-2 py-1 text-xs ${t.status==='done' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{t.status || 'open'}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -167,10 +180,71 @@ export default function TodosPage(){
 
       {/* Pagination */}
       <div className="flex items-center justify-between pt-2">
-        <div className="text-sm text-slate-600">{total.toLocaleString()} total • Page {page + 1} of {pageCount}</div>
+        <div className="text-sm text-slate-600">Showing {Math.min(displayRows.length, VISIBLE_ROWS)} of {total.toLocaleString()}</div>
         <div className="flex items-center gap-2">
           <button className="icon-btn" disabled={!canPrev} onClick={()=> canPrev && setPage(p=>p-1)} title="Previous">‹</button>
           <button className="icon-btn" disabled={!canNext} onClick={()=> canNext && setPage(p=>p+1)} title="Next">›</button>
+        </div>
+      </div>
+
+      <QuickTaskEditModal
+        open={quickOpen}
+        task={selected}
+        lead={selected ? leadNames[selected.lead_id] : null}
+        onClose={()=> { setQuickOpen(false); setSelected(null); }}
+        onSaved={async (patch)=> {
+          if (!selected) return;
+          try{
+            const updated = await updateLeadTask(selected.id, patch);
+            setRows(prev => prev.map(t => t.id === selected.id ? { ...t, ...updated } : t));
+            setQuickOpen(false); setSelected(null);
+          }catch(e){ alert(e?.message || 'Update failed'); }
+        }}
+      />
+    </div>
+  );
+}
+
+function QuickTaskEditModal({ open, task, lead, onClose, onSaved }){
+  const [title, setTitle] = useState(task?.title || '');
+  const [due, setDue] = useState(task?.due_date ? new Date(task.due_date).toISOString().slice(0,16) : '');
+  const [status, setStatus] = useState(task?.status || 'open');
+  useEffect(()=>{
+    if (open){
+      setTitle(task?.title || '');
+      setDue(task?.due_date ? new Date(task.due_date).toISOString().slice(0,16) : '');
+      setStatus(task?.status || 'open');
+    }
+  }, [open, task]);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[90] bg-black/30 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg overflow-hidden">
+        <div className="px-4 py-3 border-b flex items-center justify-between">
+          <div className="font-medium">Edit Task</div>
+          <button className="icon-btn" onClick={onClose}>✕</button>
+        </div>
+        <div className="p-4 space-y-3 text-sm">
+          {lead && <div className="text-slate-600">Lead: <span className="font-medium">{lead.name}</span></div>}
+          <div>
+            <div className="text-slate-600 mb-1">Title</div>
+            <input className="input w-full" value={title} onChange={(e)=> setTitle(e.target.value)} />
+          </div>
+          <div>
+            <div className="text-slate-600 mb-1">Due</div>
+            <input type="datetime-local" className="input w-full" value={due} onChange={(e)=> setDue(e.target.value)} />
+          </div>
+          <div>
+            <div className="text-slate-600 mb-1">Status</div>
+            <select className="input w-full" value={status} onChange={(e)=> setStatus(e.target.value)}>
+              <option value="open">open</option>
+              <option value="done">done</option>
+            </select>
+          </div>
+        </div>
+        <div className="px-4 py-3 border-t flex items-center justify-end gap-2">
+          <button className="px-3 py-2 rounded border" onClick={onClose}>Cancel</button>
+          <button className="px-3 py-2 rounded bg-gray-900 text-white" onClick={()=> onSaved?.({ title, due_date: due || null, status })}>Save</button>
         </div>
       </div>
     </div>

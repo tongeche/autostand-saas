@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  FiUsers, FiCheckSquare, FiGrid, FiBox, FiSearch, FiMenu, FiCalendar, FiFileText, FiSettings
+  FiUsers, FiCheckSquare, FiGrid, FiBox, FiSearch, FiMenu, FiCalendar, FiFileText, FiSettings,
+  FiBell, FiPlusCircle, FiChevronLeft, FiChevronRight
 } from "react-icons/fi";
 import AddLeadWizard from "../features/leads/components/AddLeadWizard.jsx";
 import QuickTaskModal from "../features/todos/components/QuickTaskModal.jsx";
@@ -53,6 +54,7 @@ export default function Layout() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const session = useSupabaseSession();
   const [orgName, setOrgName] = useState("");
+  const [orgLogo, setOrgLogo] = useState("");
   const [profile, setProfile] = useState({ avatar_url: "", full_name: "", email: "" });
   const [notifs, setNotifs] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -108,11 +110,12 @@ export default function Layout() {
         // Try brand first
         const { data: brand } = await supabase
           .from('org_settings')
-          .select('brand_name')
+          .select('brand_name, brand_logo_url')
           .eq('org_id', orgId)
           .maybeSingle();
         const name = (brand?.brand_name || ms[0]?.orgs?.name || "").trim();
         setOrgName(name);
+        setOrgLogo(brand?.brand_logo_url || "");
       }catch{ setOrgName(""); }
     })();
   }, [session]);
@@ -156,6 +159,13 @@ export default function Layout() {
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [plusOpen]);
 
+  // Listen for sidebar collapse requests (e.g., Calendar wants a wide canvas)
+  useEffect(()=>{
+    const onCollapse = () => setOpen(false);
+    window.addEventListener('autostand:sidebar:collapse', onCollapse);
+    return () => window.removeEventListener('autostand:sidebar:collapse', onCollapse);
+  }, []);
+
   // global open for Add Lead wizard
   useEffect(()=>{
     const fn = () => setAddLeadOpen(true);
@@ -179,8 +189,13 @@ export default function Layout() {
     <div className="min-h-screen app-shell flex">
       {/* DESKTOP SIDEBAR (explicitly gated by isDesktop) */}
       {isDesktop && (
-        <aside className={`${open ? "w-72" : "w-16"} sidebar transition-all duration-200 flex flex-col`}>
-          <SidebarHeader open={open} onToggle={() => setOpen(v => !v)} orgName={orgName} />
+        <aside
+          className={`${open ? "w-72" : "w-16"} sidebar transition-all duration-200 flex flex-col`}
+          onClickCapture={(e)=>{
+            if (!open) { e.preventDefault(); e.stopPropagation(); setOpen(true); }
+          }}
+        >
+          <SidebarHeader open={open} onToggle={() => setOpen(v => !v)} orgName={orgName} orgLogo={orgLogo} />
           <SidebarNav open={open} />
           {open && <SidebarOnboarding />}
         </aside>
@@ -213,7 +228,7 @@ export default function Layout() {
       <div className="flex-1 flex flex-col">
         {/* Topbar */}
         <header className="topbar sticky top-0 z-40 safe">
-          <div className="px-3 md:px-6 py-3 flex items-center justify-between">
+          <div className="px-2 md:px-6 py-2 md:py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               {!isDesktop && (
                 <button
@@ -235,29 +250,34 @@ export default function Layout() {
               {/* Notifications bell */}
               <div className="relative">
                 <button className="icon-btn min-h-[40px] relative" onClick={()=> setNotifOpen(v=>!v)} aria-label="Notifications">
-                  🛎️
+                  <FiBell/>
                   {notifs.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-[10px] px-1">{notifs.length}</span>}
                 </button>
                 {notifOpen && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border z-50 p-2">
-                    <div className="text-sm font-medium px-2 py-1">Notifications</div>
-                    <div className="max-h-72 overflow-auto">
+                  <div className="absolute right-0 mt-2 w-80 rounded-2xl shadow-xl z-50 overflow-hidden" style={{ background: 'linear-gradient(180deg, rgba(183,224,195,.25) 0%, rgba(255,255,255,.95) 22%, rgba(255,255,255,1) 100%)' }}>
+                    <div className="px-3 py-2 text-sm font-semibold text-primary bg-white/60 border-b">Notifications</div>
+                    <div className="max-h-72 overflow-auto p-2">
                       {(notifs||[]).length === 0 ? (
                         <div className="px-2 py-4 text-sm text-slate-500">No new notifications</div>
-                      ) : (notifs.map(n => (
-                        <div key={n.id} className="px-2 py-2 rounded-lg hover:bg-slate-50">
-                          <div className="text-sm font-medium">{n.title}</div>
-                          {n.body && <div className="text-xs text-slate-600">{n.body}</div>}
-                          <div className="mt-1 text-xs text-slate-500">{new Date(n.deliver_at).toLocaleString()}</div>
-                          <div className="mt-2"><button className="text-xs underline" onClick={async()=>{ await markRead(n.id); setNotifs(prev => prev.filter(x=> x.id !== n.id)); }}>Mark read</button></div>
-                        </div>
-                      )))}
+                      ) : (notifs.map(n => {
+                        const tone = notifTone(n?.title||'');
+                        return (
+                          <div key={n.id} className={`px-2 py-2 rounded-xl mb-1 ${tone.bg} ${tone.fg} flex items-start justify-between`}>
+                            <div className="min-w-0 pr-2">
+                              <div className="text-sm font-medium truncate">{n.title}</div>
+                              {n.body && <div className="text-xs opacity-80 truncate">{n.body}</div>}
+                              <div className="mt-1 text-[11px] opacity-70">{new Date(n.deliver_at).toLocaleString()}</div>
+                            </div>
+                            <button className={`text-xs underline ${tone.link}`} onClick={async()=>{ await markRead(n.id); setNotifs(prev => prev.filter(x=> x.id !== n.id)); }}>Mark read</button>
+                          </div>
+                        );
+                      }))}
                     </div>
                   </div>
                 )}
               </div>
               <div className="relative" ref={plusRef}>
-                <button className="icon-btn min-h-[40px]" onClick={()=> setPlusOpen(v=>!v)}>+</button>
+                <button className="icon-btn min-h-[40px]" onClick={()=> setPlusOpen(v=>!v)} aria-label="Quick actions"><FiPlusCircle/></button>
                 {plusOpen && (
                   <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border z-50">
                     <MenuItem label="Schedule" onClick={()=>{ setPlusOpen(false); setQuickDefaults({ title: 'Schedule', due: new Date(Date.now()+60*60*1000) }); setQuickTaskOpen(true); }} />
@@ -347,22 +367,39 @@ function MenuItem({ label, onClick }){
 
 /* ───────── Sidebar pieces ───────── */
 
-function SidebarHeader({ open, onToggle, closeLabel, orgName }) {
+function SidebarHeader({ open, onToggle, closeLabel, orgName, orgLogo }) {
   return (
     <div className="p-4 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <div className="text-lg font-bold">{orgName || 'AutoStand'}</div>
-        {open && !orgName && <span className="badge">v2</span>}
+        {open ? (
+          <div className="text-lg font-bold">{orgName || 'AutoStand'}</div>
+        ) : (
+          <div className="h-8 w-8 rounded-full overflow-hidden bg-white grid place-items-center">
+            {orgLogo ? (
+              <img src={orgLogo} alt="logo" className="h-full w-full object-contain"/>
+            ) : (
+              <span className="text-sm font-semibold text-primary">{(orgName||'A').slice(0,1).toUpperCase()}</span>
+            )}
+          </div>
+        )}
       </div>
       <button
         onClick={onToggle}
         className="icon-btn text-sm"
         aria-label={closeLabel || "Collapse sidebar"}
       >
-        {closeLabel ? closeLabel : open ? "<" : ">"}
+        {closeLabel ? closeLabel : open ? <FiChevronLeft/> : <FiChevronRight/>}
       </button>
     </div>
   );
+}
+
+function notifTone(title){
+  const t = String(title||'').toLowerCase();
+  if (t.includes('call')) return { bg:'bg-sky-50', fg:'text-sky-900', link:'text-sky-800' };
+  if (t.includes('email') || t.includes('mail')) return { bg:'bg-violet-50', fg:'text-violet-900', link:'text-violet-800' };
+  if (t.includes('push') || t.includes('remind')) return { bg:'bg-amber-50', fg:'text-amber-900', link:'text-amber-800' };
+  return { bg:'bg-slate-50', fg:'text-slate-900', link:'text-slate-800' };
 }
 
 function SidebarNav({ open, onNavigate }) {

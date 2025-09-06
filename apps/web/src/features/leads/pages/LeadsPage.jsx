@@ -81,6 +81,15 @@ export default function LeadsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]); // re-run when page changes
 
+  // Read status from URL on mount
+  useEffect(()=>{
+    try{
+      const params = new URLSearchParams(window.location.search);
+      const s = params.get('status');
+      if (s && STATUS_OPTIONS.includes(s)) setStatus(s);
+    }catch{}
+  }, []);
+
   // Requery when filters change
   useEffect(() => {
     load({ resetPage: true });
