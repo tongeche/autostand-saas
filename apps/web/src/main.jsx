@@ -21,21 +21,24 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <BrowserRouter>
       <ThemeProvider>
         <Routes>
+          {/* Public standalone pages */}
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/onboard" element={<OnboardWizard />} />
+
+          {/* App shell with sidebar */}
           <Route path="/" element={<Layout />}>
-            <Route index element={<LandingPage />} />
             <Route path="dashboard"  element={<Dashboard />} />
-            <Route path="login"      element={<LoginPage />} />
-            <Route path="signup"     element={<SignupPage />} />
-            <Route path="onboard"    element={<OnboardWizard />} />
             <Route path="settings"   element={<SettingsPage />} />
-            <Route path="leads" element={<LeadsPage />} /> 
+            <Route path="leads"      element={<LeadsPage />} />
             <Route path="todos"      element={<TodosPage />} />
             <Route path="inventory"  element={<InventoryPage />} />
             <Route path="calendar"   element={<CalendarPage />} />
             <Route path="wall"       element={<StickyWallPage />} />
-            <Route path="leads" element={<LeadsPage />} />
           </Route>
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </ThemeProvider>
     </BrowserRouter>
