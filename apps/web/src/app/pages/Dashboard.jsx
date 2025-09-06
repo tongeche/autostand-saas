@@ -8,6 +8,7 @@ import {
 } from "react-icons/fi"; // + FiTarget
 import { fetchStats } from "../../features/dashboard/stats";
 import { listTenantActivity, listUpcomingTasksTenant } from "../../features/leads/services/supabase";
+import { listDeliverable, markRead } from "../../features/notifications/services/notifications";
 import QuickTaskModal from "../../features/todos/components/QuickTaskModal.jsx";
 import { formatShortDate } from "../../features/todos/components/shared";
 
@@ -77,6 +78,7 @@ export default function Dashboard() {
   const [err, setErr] = useState(null);
   const [acts, setActs] = useState([]);
   const [upcoming, setUpcoming] = useState([]);
+  const [reminders, setReminders] = useState([]);
   const [quickOpen, setQuickOpen] = useState(false);
 
   useEffect(() => {
@@ -85,12 +87,14 @@ export default function Dashboard() {
         setErr(null);
         const data = await fetchStats();
         setStats(data);
-        const [a, t] = await Promise.all([
+        const [a, t, r] = await Promise.all([
           listTenantActivity({ limit: 8 }),
           listUpcomingTasksTenant({ limit: 6 }),
+          listDeliverable({ onlyUnread: true, limit: 6 }),
         ]);
         setActs(a || []);
         setUpcoming(t || []);
+        setReminders(r || []);
       } catch (e) {
         console.error("Dashboard stats error:", e);
         setErr(e.message || String(e));
@@ -102,12 +106,14 @@ export default function Dashboard() {
           setErr(null);
           const data = await fetchStats();
           setStats(data);
-          const [a, t] = await Promise.all([
+          const [a, t, r] = await Promise.all([
             listTenantActivity({ limit: 8 }),
             listUpcomingTasksTenant({ limit: 6 }),
+            listDeliverable({ onlyUnread: true, limit: 6 }),
           ]);
           setActs(a || []);
           setUpcoming(t || []);
+          setReminders(r || []);
         } catch (e) {
           setErr(e.message || String(e));
         }
@@ -162,7 +168,7 @@ export default function Dashboard() {
       </div>
 
       {/* Panels (still stubbed; next steps will wire real data) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 lg:gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-4 lg:gap-5">
         <Panel title="Recent Activities">
           {acts.length === 0 ? (
             <ListItem text="No recent activity" />
@@ -180,11 +186,25 @@ export default function Dashboard() {
             <Task key={t.id} text={t.title || '(untitled)'} right={<span className="text-xs text-slate-600">{t.due_date ? formatShortDate(t.due_date) : '—'}</span>} />
           ))}
         </Panel>
+        <Panel title="Reminders">
+          {(!reminders || reminders.length === 0) ? (
+            <ListItem text="No reminders" />
+          ) : reminders.map((n) => (
+            <div key={n.id} className="flex items-center justify-between rounded-xl border px-3 py-2">
+              <div className="text-sm truncate">{n.title}</div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-600">{new Date(n.deliver_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}</span>
+                <button className="text-xs underline" onClick={async()=>{ try{ await markRead(n.id); setReminders(prev => prev.filter(x=> x.id !== n.id)); }catch{} }}>Done</button>
+              </div>
+            </div>
+          ))}
+        </Panel>
       </div>
 
       <QuickTaskModal open={quickOpen} onClose={()=> setQuickOpen(false)} onCreated={()=>{
         // reload upcoming quickly
         listUpcomingTasksTenant({ limit: 6 }).then(setUpcoming).catch(()=>{});
+        listDeliverable({ onlyUnread: true, limit: 6 }).then(setReminders).catch(()=>{});
       }}/>
     </div>
   );
