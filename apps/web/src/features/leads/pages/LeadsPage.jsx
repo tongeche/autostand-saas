@@ -44,7 +44,7 @@ export default function LeadsPage() {
       let query = supabase
         .from("leads")
         .select("*", { count: "exact" })
-        .eq("tenant_id", tenantId)
+        .eq("org_id", tenantId)
         .eq("archived", false);
 
       if (status && status !== "all") query = query.eq("status", status);

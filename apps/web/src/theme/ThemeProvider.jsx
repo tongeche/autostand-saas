@@ -20,7 +20,7 @@ export default function ThemeProvider({ children }){
         const { data, error } = await supabase
           .from("themes")
           .select("settings")
-          .eq("tenant_id", getTenantId())
+          .eq("org_id", getTenantId())
           .order("created_at", { ascending:false })
           .limit(1)
           .maybeSingle();

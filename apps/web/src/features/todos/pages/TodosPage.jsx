@@ -42,7 +42,7 @@ export default function TodosPage(){
         const { data, error } = await supabase
           .from("leads")
           .select("id,name,plate")
-          .eq("tenant_id", getTenantId())
+          .eq("org_id", getTenantId())
           .in("id", ids);
         if (!error && Array.isArray(data)){
           const map = {}; data.forEach(l => { map[l.id] = l; });

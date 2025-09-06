@@ -18,7 +18,7 @@ export default function QuickTaskModal({ open, onClose, onCreated, defaultTitle 
       const { data, error } = await supabase
         .from("leads")
         .select("id,name,plate,created_at")
-        .eq("tenant_id", getTenantId())
+        .eq("org_id", getTenantId())
         .order("created_at", { ascending:false })
         .limit(50);
       if (!error) setLeads(data||[]);

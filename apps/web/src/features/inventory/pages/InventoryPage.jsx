@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { FiSearch, FiUpload, FiDownload, FiMoreHorizontal } from "react-icons/fi";
 import InventoryCsvImportModal from "../components/InventoryCsvImportModal.jsx";
 import { insertCarsCsvStaging, listCarsStaging } from "../services/cars";
-import { listGeneralItems } from "../services/general";
+import { listGeneralItems, upsertGeneralItemsFromCsv } from "../services/general";
 import { supabase } from "../../../lib/supabase";
 
 export default function InventoryPage(){
@@ -78,19 +78,31 @@ export default function InventoryPage(){
         {/* Metrics (computed) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="bg-white rounded-xl shadow-sm p-4">
-            <div className="text-slate-600 text-sm">Total vehicles</div>
+            <div className="text-slate-600 text-sm">{biz === 'cars' ? 'Total vehicles' : 'Total items'}</div>
             <div className="text-3xl font-semibold mt-1">{rows.length.toLocaleString()}</div>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4">
             <div className="text-slate-600 text-sm">Average price</div>
-            <div className="text-3xl font-semibold mt-1">{avgMoney(rows.map(r=> r.sale_price || r.total_with_expenses))}</div>
+            <div className="text-3xl font-semibold mt-1">
+              {biz === 'cars' ? avgMoney(rows.map(r=> r.sale_price || r.total_with_expenses)) : avgMoney(rows.map(r=> r.price))}
+            </div>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4">
             <div className="text-slate-600 text-sm">Status</div>
             <div className="mt-2 flex items-center gap-4 text-xs text-slate-600 flex-wrap">
-              <Legend dot="bg-emerald-500" label="In stock" value={rows.filter(r=> mapVehicleStatus(r.status)==='in_stock').length}/>
-              <Legend dot="bg-amber-400" label="Low stock" value={rows.filter(r=> mapVehicleStatus(r.status)==='low_stock').length}/>
-              <Legend dot="bg-red-500" label="Out" value={rows.filter(r=> mapVehicleStatus(r.status)==='out_of_stock').length}/>
+              {biz === 'cars' ? (
+                <>
+                  <Legend dot="bg-emerald-500" label="In stock" value={rows.filter(r=> mapVehicleStatus(r.status)==='in_stock').length}/>
+                  <Legend dot="bg-amber-400" label="Low stock" value={rows.filter(r=> mapVehicleStatus(r.status)==='low_stock').length}/>
+                  <Legend dot="bg-red-500" label="Out" value={rows.filter(r=> mapVehicleStatus(r.status)==='out_of_stock').length}/>
+                </>
+              ) : (
+                <>
+                  <Legend dot="bg-emerald-500" label="In stock" value={rows.filter(r=> (Number(r.quantity)||0) > 5).length}/>
+                  <Legend dot="bg-amber-400" label="Low stock" value={rows.filter(r=> (Number(r.quantity)||0) > 0 && (Number(r.quantity)||0) <= 5).length}/>
+                  <Legend dot="bg-red-500" label="Out" value={rows.filter(r=> (Number(r.quantity)||0) === 0).length}/>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -172,7 +184,7 @@ export default function InventoryPage(){
                       <td className="px-3 py-3 text-sm">{r.sku || '—'}</td>
                       <td className="px-3 py-3 text-right text-sm">{num(r.quantity)}</td>
                       <td className="px-3 py-3 text-right text-sm">{money(r.price)}</td>
-                      <td className="px-3 py-3 text-sm">{r.status || '—'}</td>
+                      <td className="px-3 py-3 text-sm">{statusPill(generalStockFromQty(r.quantity))}</td>
                       <td className="px-3 py-3 text-sm">{r.category || '—'}</td>
                       <td className="px-3 py-3 text-right"><button className="icon-btn"><FiMoreHorizontal/></button></td>
                     </>
@@ -228,11 +240,18 @@ export default function InventoryPage(){
           }));
           try {
             setLoading(true); setErr(null);
-            // Save raw CSV into staging with exact headers (all text)
-            await insertCarsCsvStaging(headers, raw);
-            // Display data from staging
-            await loadFromDb();
-            alert(`Imported ${raw.length} rows into staging`);
+            if (biz === 'cars'){
+              // Save raw CSV into staging with exact headers (all text)
+              await insertCarsCsvStaging(headers, raw);
+              // Display data from staging
+              await loadFromDb();
+              alert(`Imported ${raw.length} rows into staging`);
+            } else {
+              // General inventory CSV: expect headers [name, sku, quantity, price, status, category]
+              const res = await upsertGeneralItemsFromCsv(headers, raw);
+              await loadFromDb();
+              alert(`Imported ${res.inserted} general items`);
+            }
           } catch(e){
             setErr(e.message || String(e));
             alert(`Import failed: ${e?.message || e}`);
@@ -272,6 +291,14 @@ function mapVehicleStatus(s){
   if (t.includes('stock') || t.includes('dispon')) return 'in_stock';
   if (t.includes('low') || t.includes('baixo')) return 'low_stock';
   if (t.includes('out') || t.includes('esgot')) return 'out_of_stock';
+  return 'in_stock';
+}
+
+// For general inventory, derive stock status from quantity
+function generalStockFromQty(qty){
+  const n = Number(qty||0);
+  if (n <= 0) return 'out_of_stock';
+  if (n <= 5) return 'low_stock';
   return 'in_stock';
 }
 

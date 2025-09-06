@@ -57,7 +57,7 @@ export default function LeadCard({ lead, onEdit, onView, onAfterChange }) {
         const { data, error } = await supabase
           .from("lead_notes")
           .select("body, created_at")
-          .eq("tenant_id", getTenantId())
+          .eq("org_id", getTenantId())
           .eq("lead_id", id)
           .order("created_at", { ascending: false })
           .limit(1);

@@ -1,202 +1,260 @@
-import React, { useMemo, useState } from "react";
-import { FiLayers, FiFilePlus, FiEye } from "react-icons/fi";
+import React, { useEffect, useMemo, useState } from "react";
+import { FiChevronDown, FiChevronRight, FiEye, FiFilePlus, FiSave, FiUpload, FiSettings, FiShare2, FiTrash2 } from "react-icons/fi";
+import { supabase } from "../../../lib/supabase";
+import { getTenantId } from "../../../lib/tenant";
 import DocumentWizard from "../components/DocumentWizard.jsx";
 import { useLocation, useNavigate } from "react-router-dom";
 
-// Simple template renderer: {{ key }}
+// Simple {{ key }} placeholder renderer
 function render(body, ctx){
   const flat = ctx || {};
   return String(body||"").replace(/{{\s*([\w.]+)\s*}}/g, (_,k)=> String(flat[k] ?? ""));
 }
 
-const SAMPLE_TEMPLATES = [
-  {
-    id: 't1', name: 'Vehicle Proposal (PT)',
-    body: `Olá {{client.name}},\n\nSegue a proposta para o {{car.make}} {{car.model}} ({{car.plate}}).\nPreço: {{car.price}} €.\n\nCumprimentos,\n{{dealer.name}}`
-  },
-  {
-    id: 't2', name: 'Follow-up (EN)',
-    body: `Hello {{client.name}},\n\nJust checking in about the {{car.make}} {{car.model}}.\nLet me know if you want a test drive.\n\nBest,\n{{dealer.name}}`
-  }
-];
+export default function DocumentManager(){
+  const orgId = getTenantId();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [stages, setStages] = useState([]);
+  const [leadsByStage, setLeadsByStage] = useState({});
+  const [templates, setTemplates] = useState([]);
+  const [selectedTpl, setSelectedTpl] = useState(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editor, setEditor] = useState({ title: "Untitled Document", body: "", ctx: {}, type: "text" });
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
-export default function DocumentsPage(){
   const location = useLocation();
   const navigate = useNavigate();
-  const [templates] = useState(SAMPLE_TEMPLATES);
-  const [tplId, setTplId] = useState(templates[0].id);
-  const [title, setTitle] = useState("Untitled Document");
-  const [body, setBody] = useState(templates[0].body);
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [docType, setDocType] = useState('text');
-  const [showTemplates, setShowTemplates] = useState(false); // mobile toggle
 
-  const baseCtx = useMemo(()=>({
-    client: { name: 'Cliente' },
-    car: { plate:'AA-00-AA', make:'Volkswagen', model:'Golf', price:'17 900' },
-    dealer: { name:'AutoStand' }
-  }), []);
-  const [docCtx, setDocCtx] = useState(baseCtx);
+  // Load pipeline stages, leads and templates
+  useEffect(()=>{
+    (async ()=>{
+      try{
+        setBusy(true); setErr("");
+        // stages
+        const { data: ps, error: e1 } = await supabase
+          .from('pipeline_stages')
+          .select('id,name,position,is_closed')
+          .eq('org_id', orgId)
+          .order('position', { ascending: true });
+        if (e1) throw e1; setStages(ps || []);
+        // leads grouped
+        const { data: leads, error: e2 } = await supabase
+          .from('leads')
+          .select('id,name,email,phone,plate,stage_id')
+          .eq('org_id', orgId)
+          .order('created_at', { ascending: false })
+          .limit(500);
+        if (e2) throw e2;
+        const map = {};
+        (leads||[]).forEach(l => { const k = l.stage_id || 'none'; (map[k] ||= []).push(l); });
+        setLeadsByStage(map);
+        // templates table (fallback to in-file samples if empty)
+        const { data: tpls } = await supabase
+          .from('templates')
+          .select('id,name,category,subject,body')
+          .order('name', { ascending: true });
+        const all = (tpls && tpls.length) ? tpls : SAMPLE_FALLBACK_TEMPLATES;
+        setTemplates(all);
+        setSelectedTpl(all[0] || null);
+      }catch(e){ setErr(e.message || String(e)); }
+      finally{ setBusy(false); }
+    })();
+  }, [orgId]);
 
-  function applyTemplate(id){
-    const t = templates.find(x=>x.id===id); if (!t) return;
-    setTplId(id);
-    setBody(t.body);
-    setTitle(t.name);
-  }
-
-  function openPrint(){
-    const html = printableHtml(title, render(body, docCtx), docCtx, docType);
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.open(); w.document.write(html); w.document.close();
-    try { w.focus(); } catch {}
-  }
-
-  // Open wizard from URL (?new=car|checklist|blank)
-  React.useEffect(()=>{
+  // open wizard from URL (?new=car|checklist|blank)
+  useEffect(()=>{
     const params = new URLSearchParams(location.search);
     const kind = params.get('new');
-    if (kind){
-      setWizardOpen(true);
-      setDocType(kind);
-      // cleanup query param after opening
-      const next = new URLSearchParams(location.search); next.delete('new');
-      navigate({ search: next.toString() }, { replace: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (kind){ setWizardOpen(true); const next = new URLSearchParams(location.search); next.delete('new'); navigate({ search: next.toString() }, { replace: true }); }
   }, []);
 
+  function openEditorFromTemplate(tpl, lead){
+    const ctx = makeCtxFromLead(lead);
+    const title = tpl?.name || 'Document';
+    const body = tpl?.body || '';
+    setEditor({ title, body, ctx, type: 'text' });
+    setEditorOpen(true);
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="min-w-0">
           <div className="text-xl font-semibold truncate">Documents</div>
-          <div className="text-sm text-slate-600 hidden sm:block">Create documents, templates, and ready‑to‑send PDFs for clients.</div>
+          <div className="text-sm text-slate-600 hidden sm:block">Create documents from templates, aligned with your pipeline.</div>
         </div>
-        <IconHeaderActions
-          onNew={()=> setWizardOpen(true)}
-          onReady={()=> applyTemplate('t1')}
-          onPreview={openPrint}
+      </div>
+
+      {err && <div className="text-sm text-red-700 bg-red-50 rounded-xl p-3 shadow-sm">{err}</div>}
+
+      {/* Action Center (Emitir / Manage Rules / Upload) */}
+      <div className="bg-white p-6 rounded-xl shadow-md">
+        <div className="flex items-center justify-center gap-4">
+          {/* Emitir dropdown with submenus */}
+          <EmitirMenu templates={templates} onPickTemplate={(t)=>{ setSelectedTpl(t); setEditor({ title: t?.name||'Document', body: t?.body||'', ctx:{}, type:'text' }); setEditorOpen(true); }} onNewBlank={()=> setWizardOpen(true)} />
+          <button className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-xl shadow" onClick={()=> alert('Rules coming soon')}> <FiSettings className="inline mr-2"/> Manage Rules</button>
+          <button className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-xl shadow" onClick={()=> alert('Upload coming soon')}> <FiUpload className="inline mr-2"/> Upload</button>
+        </div>
+      </div>
+
+      {/* Pipeline categories */}
+      <div className="bg-white p-4 rounded-xl shadow-md">
+        <div className="px-1 pb-2 text-sm text-slate-600">Pipeline</div>
+        <div>
+          {(stages||[]).map(s => (
+            <StageRow key={s.id} stage={s} leads={leadsByStage[s.id]||[]} onCreate={(lead)=> openEditorFromTemplate(selectedTpl||SAMPLE_FALLBACK_TEMPLATES[0], lead)} />
+          ))}
+          {stages?.length===0 && <div className="p-3 text-sm text-slate-600">No stages yet.</div>}
+        </div>
+      </div>
+
+      {editorOpen && (
+        <DocEditorModal
+          init={editor}
+          onClose={()=> setEditorOpen(false)}
+          onPreview={(ed)=> openPreview(ed)}
+          onShare={(ed)=> { setEditor(ed); setShareOpen(true); }}
+          onDelete={()=> setDeleteOpen(true)}
         />
-      </div>
+      )}
 
-      {/* Workspace */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Templates */}
-        <aside className={`lg:col-span-1 bg-white rounded-xl border p-3 ${showTemplates ? '' : 'hidden'} lg:block`}>
-          <div className="font-medium mb-2">Templates</div>
-          <div className="space-y-2">
-            {templates.map(t => (
-              <button key={t.id} onClick={()=>applyTemplate(t.id)}
-                className={`w-full text-left px-3 py-2 rounded-lg border ${tplId===t.id?'bg-accent/40 border-accent':'bg-white'}`}
-              >{t.name}</button>
-            ))}
-          </div>
-          <div className="text-xs text-slate-600 mt-3">Coming soon: manage your own templates, variables and branding.</div>
-        </aside>
+      <DocumentWizard initialType={'blank'} open={wizardOpen} onClose={()=> setWizardOpen(false)} onCreate={({ title, body, ctx, type })=>{
+        setEditor({ title, body, ctx, type });
+        setEditorOpen(true);
+        setWizardOpen(false);
+      }} />
 
-        {/* Editor */}
-        <section className="lg:col-span-2 bg-white rounded-xl border p-3 space-y-3">
-          {/* Mobile templates toggle */}
-          <div className="flex items-center justify-between lg:hidden">
-            <button className="text-sm px-2 py-1 rounded border bg-white" onClick={()=> setShowTemplates(v=>!v)}>
-              {showTemplates ? 'Hide templates' : 'Show templates'}
-            </button>
-          </div>
-          <label className="block text-sm">
-            <div className="text-slate-600 mb-1">Title</div>
-            <input className="w-full rounded-lg border px-3 py-2 text-sm" value={title} onChange={(e)=>setTitle(e.target.value)} />
-          </label>
-          <label className="block text-sm">
-            <div className="text-slate-600 mb-1">Body</div>
-            <textarea className="w-full h-72 rounded-lg border px-3 py-2 text-sm font-mono" value={body} onChange={(e)=>setBody(e.target.value)} />
-          </label>
-          <div className="text-xs text-slate-600">Available tags: {"{{client.name}}"}, {"{{car.plate}}"}, {"{{car.make}}"}, {"{{car.model}}"}, {"{{car.price}}"}, {"{{dealer.name}}"}</div>
-        </section>
-      </div>
-      <DocumentWizard initialType={docType} open={wizardOpen} onClose={()=> setWizardOpen(false)} onCreate={({ title, body, ctx, type })=>{ setTitle(title); setBody(body); setDocCtx(ctx ? { ...baseCtx, ...ctx, client: { ...baseCtx.client, ...(ctx.client||{}) }, car: { ...baseCtx.car, ...(ctx.car||{}) }, dealer: { ...baseCtx.dealer, ...(ctx.dealer||{}) } } : baseCtx); setDocType(type || 'text'); setWizardOpen(false); }} />
+      {/* Share modal */}
+      {shareOpen && (
+        <ShareModal
+          title={editor?.title}
+          body={render(editor?.body, editor?.ctx)}
+          onClose={()=> setShareOpen(false)}
+        />
+      )}
+
+      {/* Delete confirm modal (no persistence yet) */}
+      {deleteOpen && (
+        <DeleteConfirmModal
+          onCancel={()=> setDeleteOpen(false)}
+          onConfirm={()=> { setDeleteOpen(false); setEditorOpen(false); }}
+        />
+      )}
     </div>
   );
 }
 
-function printableHtml(title, content, ctx, docType){
-  const safe = (s)=> String(s||"").replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br/>');
-  const header = `
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:16px;border-radius:12px;background:#f5f6f8;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:28px;font-weight:800;color:#d72626;">auto</span>
-        <span style="font-size:28px;font-weight:800;color:#111;">trust</span>
+function StageRow({ stage, leads, onCreate }){
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="p-2">
+      <button className="w-full flex items-center justify-between px-2 py-2 rounded hover:bg-slate-50" onClick={()=> setOpen(v=>!v)}>
+        <div className="inline-flex items-center gap-2">
+          {open ? <FiChevronDown/> : <FiChevronRight/>}
+          <div className="font-medium">{stage.name}</div>
+          <div className="text-xs text-slate-500">{leads.length} leads</div>
+        </div>
+      </button>
+      {open && (
+        <div className="pl-6 pr-2 pb-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+          {leads.map(l => (
+            <div key={l.id} className="rounded-xl p-3 flex items-center justify-between bg-white shadow">
+              <div className="min-w-0">
+                <div className="text-sm font-medium truncate">{l.name || l.email || l.phone || l.plate || l.id}</div>
+                <div className="text-xs text-slate-500 truncate">{l.email || l.phone || l.plate || ''}</div>
+              </div>
+              <div className="inline-flex items-center gap-1">
+                <button className="px-3 py-1.5 rounded-xl text-white text-xs font-medium shadow" style={{ background:'#3C6B5B' }} onClick={()=> onCreate?.(l)}>Use template</button>
+              </div>
+            </div>
+          ))}
+          {leads.length===0 && <div className="text-sm text-slate-600">No leads in this stage.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DocEditorModal({ init, onClose, onPreview, onShare, onDelete }){
+  const [title, setTitle] = useState(init?.title || 'Untitled Document');
+  const [body, setBody] = useState(init?.body || '');
+  const [ctx] = useState(init?.ctx || {});
+  return (
+    <div className="fixed inset-0 z-[90] bg-black/30 flex items-start justify-center p-4">
+      <div className="w-full max-w-3xl bg-white rounded-2xl shadow-lg overflow-hidden">
+        <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom:'1px solid #e5e7eb' }}>
+          <div className="font-medium">Edit Document</div>
+          <button className="p-2 rounded border" onClick={onClose}>×</button>
+        </div>
+        <div className="p-4 space-y-3">
+          <label className="text-sm block">
+            <div className="text-slate-600 mb-1">Title</div>
+            <input className="w-full rounded-lg border px-3 py-2 text-sm" value={title} onChange={(e)=> setTitle(e.target.value)} />
+          </label>
+          <label className="text-sm block">
+            <div className="text-slate-600 mb-1">Body</div>
+            <textarea className="w-full rounded-lg border px-3 py-2 text-sm min-h-[220px]" value={body} onChange={(e)=> setBody(e.target.value)} />
+          </label>
+          <div className="flex items-center justify-end gap-2">
+            <button className="px-3 py-2 rounded-xl bg-gray-200 text-gray-800 text-sm font-medium" onClick={onClose}>Close</button>
+            <button className="px-3 py-2 rounded-xl text-white text-sm inline-flex items-center gap-2 font-medium" style={{ background:'#3C6B5B' }} onClick={()=> onPreview?.({ title, body, ctx })}><FiEye/> Preview</button>
+            <button className="px-3 py-2 rounded-xl text-white text-sm inline-flex items-center gap-2 font-medium" style={{ background:'#7c3aed' }}><FiSave/> Save</button>
+            <button className="px-3 py-2 rounded-xl bg-gray-200 text-gray-800 text-sm inline-flex items-center gap-2 font-medium" onClick={()=> onShare?.({ title, body, ctx })}><FiShare2/> Share</button>
+            <button className="px-3 py-2 rounded-xl bg-gray-200 text-red-700 text-sm inline-flex items-center gap-2 font-medium" onClick={onDelete}><FiTrash2/> Delete</button>
+          </div>
+        </div>
       </div>
-      <div style="text-align:right;font-size:12px;color:#111">
-        <div style="font-weight:600;margin-bottom:4px">Autotrust</div>
-        <div>Rua Augusto Simões 259</div>
-        <div>4470-147 Maia</div>
-        <div style="margin-top:6px">915907470</div>
-        <div>geral@autotrust.pt</div>
-      </div>
-    </div>`;
-  // Vehicle spec block if context provided
-  const spec = (function(){
-    const c = (ctx&&ctx.car) || {};
-    const rows = [
-      ['Veículo', [c.make,c.model,c.version].filter(Boolean).join(' ')],
-      ['Matrícula', c.plate||''],
-      ['Data de Registo', c.first_reg||''],
-      ['Kms', c.km ? String(c.km).replace(/\B(?=(\d{3})+(?!\d))/g,' ') : ''],
-      ['Cor', c.color||''],
-      ['Combustível', c.fuel||''],
-      ['Cilindrada', c.cc ? `${c.cc} cc` : ''],
-      ['Potência', c.hp ? `${c.hp} cv` : ''],
-    ];
-    const visible = rows.filter(([k,v]) => String(v||'').trim().length);
-    if (!visible.length) return '';
-    return `<div style="margin-top:16px;border-top:1px solid #e5e7eb;padding-top:12px;">
-      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px 16px;">
-        ${visible.map(([k,v])=>`<div><div style=\"color:#64748b;font-size:12px\">${safe(k)}</div><div style=\"font-weight:600\">${safe(v)}</div></div>`).join('')}
+    </div>
+  );
+}
+
+function openPreview({ title, body, ctx }){
+  const html = printableHtml(title, render(body, ctx), ctx, 'text');
+  const w = window.open("", "_blank");
+  if (!w) return;
+  w.document.open(); w.document.write(html); w.document.close();
+  try { w.focus(); } catch {}
+}
+
+const SAMPLE_FALLBACK_TEMPLATES = [
+  { id: 'car-proposal', name: 'Vehicle Proposal', body: 'Olá {{client.name}},\nSegue a proposta para {{car.make}} {{car.model}} ({{car.plate}}).\nPreço: {{car.price}} €.' },
+  { id: 'followup', name: 'Follow‑up', body: 'Hello {{client.name}},\nFollowing up about the {{car.make}} {{car.model}}.' }
+];
+
+function makeCtxFromLead(l){
+  const name = l?.name || '';
+  return {
+    client: { name },
+    car: { plate: l?.plate || '', make: '', model: '', price: '' },
+    dealer: { name: 'Autotrust' }
+  };
+}
+
+// Printable HTML (keeps the older document output styling)
+function printableHtml(title, content, _ctx, docType){
+  function safe(x){ return String(x||'').replace(/[&<>]/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+  const header = (()=>{
+    if (docType !== 'car') return '';
+    return `<div style="display:flex;gap:16px;align-items:center;margin-bottom:12px">
+      <div style="width:64px;height:64px;border-radius:12px;background:#f3f4f6"></div>
+      <div>
+        <div style="font-weight:600">Ficha do Veículo</div>
+        <div style="color:#64748b;font-size:12px">Gerado automaticamente</div>
       </div>
     </div>`;
   })();
-
-  // Checklist block (Portuguese) — vertical sections
-  const checklist = (function(){
-    if (docType !== 'checklist') return '';
-    return `
-    <div style="margin-top:16px">
-      <h2 style="font-size:14px;margin:0 0 8px">Registo de Entrada</h2>
-      <div>Data de chegada ao stand: ________________________ &nbsp;&nbsp; Responsável: ________________________</div>
-
-      <h2 style="font-size:14px;margin:16px 0 8px">Estado Comercial</h2>
-      <div>${box()} Disponível (pronto a vender)</div>
-      <div>${box()} Reservado (sinal tomado)</div>
-      <div>${box()} Em preparação (lavagem, oficina, fotos)</div>
-      <div>${box()} Vendido (aguarda entrega / entregue)</div>
-      <div>${box()} Devolvido / Cancelado</div>
-
-      <h2 style="font-size:14px;margin:16px 0 8px">Preparação Mecânica / Visual</h2>
-      <div>${box()} Lavagem e detalhe</div>
-      <div>${box()} Pneus verificados</div>
-      <div>${box()} Revisão (óleo / fluidos / filtros)</div>
-      <div>${box()} Inspeção de segurança realizada</div>
-      <div>${box()} Pronto para test‑drive</div>
-
-      <h2 style="font-size:14px;margin:16px 0 8px">Marketing / Listagem</h2>
-      <div>${box()} Fotografias e vídeos</div>
-      <div>${box()} Dados inseridos no OnePilot</div>
-      <div>${box()} Anúncios exportados (Standvirtual / PiscaPisca)</div>
-      <div>${box()} Publicação em redes sociais</div>
-      <div>${box()} Ficha de viatura preparada</div>
-      <div>${box()} Preço confirmado e carregado</div>
-
-      <h2 style="font-size:14px;margin:16px 0 8px">Documentação</h2>
-      <div>${box()} Documentos inseridos / verificados</div>
-
-      <h2 style="font-size:14px;margin:16px 0 8px">Notas</h2>
-      <div style="border:1px dashed #cbd5e1;border-radius:8px;min-height:80px;padding:8px;color:#475569">Observações…</div>
+  const spec = (()=>{
+    if (docType !== 'car') return '';
+    return `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;border:1px solid #e5e7eb;border-radius:12px;padding:12px">
+      <div><div style="color:#64748b;font-size:12px">Matrícula</div><div style="font-weight:600">—</div></div>
+      <div><div style="color:#64748b;font-size:12px">Primeira matrícula</div><div style="font-weight:600">—</div></div>
     </div>`;
   })();
-
+  const checklist = (()=> docType==='checklist' ? `<div style="margin-top:16px">Checklist…</div>` : '')();
   return `<!doctype html><html><head><meta charset=\"utf-8\"/><title>${safe(title)}</title>
   <style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px;color:#111}
   h1{margin:0 0 12px;font-size:20px}
@@ -210,49 +268,83 @@ function printableHtml(title, content, ctx, docType){
   <div class=\"text\">${safe(content)}</div>
   <div class=\"muted\">Generated by Documents</div>
   </body></html>`;
-
-  function box(){ return `<span style=\"display:inline-block;width:12px;height:12px;border:1px solid #94a3b8;border-radius:2px;vertical-align:middle;margin-right:6px\"></span>`; }
 }
 
-function HeaderActions({ onNew, onReady, onPreview }){
-  const [open, setOpen] = useState(false);
+// Share Modal copied stylistically from template (Email / WhatsApp)
+function ShareModal({ title, body, onClose }){
+  function mailto(){
+    const subj = encodeURIComponent(title || 'Document');
+    const txt = encodeURIComponent(body || '');
+    return `mailto:?subject=${subj}&body=${txt}`;
+  }
+  function whatsapp(){
+    const txt = encodeURIComponent(`*${title || 'Document'}*\n\n${body || ''}`);
+    return `https://wa.me/?text=${txt}`;
+  }
   return (
-    <div className="relative">
-      <div className="flex items-center gap-2">
-        <button className="px-3 py-2 rounded-lg border bg-white text-sm" onClick={onReady}>Generate Ready Templates</button>
-        <button className="px-3 py-2 rounded-lg bg-gray-900 text-white text-sm" onClick={()=> setOpen(v=>!v)}>Create ▼</button>
-        <button className="px-3 py-2 rounded-lg border bg-white text-sm" onClick={onPreview}>Preview / PDF</button>
-      </div>
-      {open && (
-        <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border z-10">
-          <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={()=>{ setOpen(false); onNew?.('blank'); }}>Blank Document</button>
-          <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={()=>{ setOpen(false); onNew?.('checklist'); }}>Checklist</button>
-          <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={()=>{ setOpen(false); onNew?.('car'); }}>Car Document</button>
+    <div className="fixed inset-0 z-[95] bg-black/30 flex items-start justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg overflow-hidden">
+        <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom:'1px solid #e5e7eb' }}>
+          <div className="font-medium">Share Document</div>
+          <button className="p-2 rounded border" onClick={onClose}>×</button>
         </div>
-      )}
+        <div className="p-4 space-y-3">
+          <a href={mailto()} className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-4 rounded-xl flex items-center justify-center"><FiShare2 className="mr-2"/> Share via Email</a>
+          <a href={whatsapp()} target="_blank" rel="noreferrer" className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-4 rounded-xl flex items-center justify-center">💬 Share via WhatsApp</a>
+        </div>
+      </div>
     </div>
   );
 }
 
-// Icon-only header actions (mobile friendly)
-function IconHeaderActions({ onNew, onReady, onPreview }){
-  const [open, setOpen] = useState(false);
+// Delete confirm modal (template-like)
+function DeleteConfirmModal({ onCancel, onConfirm }){
   return (
-    <div className="relative flex items-center gap-1">
-      <button title="Generate templates" aria-label="Generate templates" className="icon-btn !h-10 !w-10" onClick={onReady}>
-        <FiLayers />
-      </button>
-      <button title="Create" aria-label="Create" className="icon-btn !h-10 !w-10" onClick={()=> setOpen(v=>!v)}>
-        <FiFilePlus />
-      </button>
-      <button title="Preview / PDF" aria-label="Preview" className="icon-btn !h-10 !w-10" onClick={onPreview}>
-        <FiEye />
+    <div className="fixed inset-0 z-[95] bg-black/30 flex items-start justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg overflow-hidden">
+        <div className="px-4 py-3">
+          <h4 className="text-xl font-bold text-gray-800 mb-1">Confirm Deletion</h4>
+          <p className="mb-4 text-sm text-slate-700">Are you sure you want to delete this document?</p>
+          <div className="flex justify-end gap-2">
+            <button className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-xl" onClick={onCancel}>Cancel</button>
+            <button className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-xl" onClick={onConfirm}>Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Emitir menu with submenus (adapts the template UX). Pure client-side.
+function EmitirMenu({ templates, onPickTemplate, onNewBlank }){
+  const [open, setOpen] = useState(false);
+  const [submenu, setSubmenu] = useState(null); // 'templates' | 'create' | null
+  return (
+    <div className="relative inline-block text-left">
+      <button onClick={()=>{ setOpen(v=>!v); setSubmenu(null); }} className="text-white font-bold py-3 px-6 rounded-xl shadow-lg" style={{ background:'#3C6B5B' }}>
+        Emitir <span className="ml-2">▼</span>
       </button>
       {open && (
-        <div className="absolute right-0 top-11 w-48 bg-white rounded-xl shadow-lg border z-20">
-          <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={()=>{ setOpen(false); onNew?.('blank'); }}>Blank</button>
-          <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={()=>{ setOpen(false); onNew?.('checklist'); }}>Checklist</button>
-          <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={()=>{ setOpen(false); onNew?.('car'); }}>Car Doc</button>
+        <div className="absolute mt-2 w-56 bg-white rounded-xl shadow-lg p-2 z-10">
+          <div className="px-2 py-1 text-xs font-semibold text-gray-400 uppercase">Most Used</div>
+          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50" onClick={()=>{ onPickTemplate?.(templates[0] || SAMPLE_FALLBACK_TEMPLATES[0]); setOpen(false); }}>⭐ Quick Proposal</button>
+          <div className="my-1"/>
+          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50" onMouseEnter={()=> setSubmenu('templates')} onClick={()=> setSubmenu('templates')}>Use Templates →</button>
+          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50" onMouseEnter={()=> setSubmenu('create')} onClick={()=> setSubmenu('create')}>Create New →</button>
+          {/* Submenus */}
+          {submenu==='templates' && (
+            <div className="absolute left-[14rem] top-10 w-64 bg-white rounded-xl shadow-lg p-2">
+              {(templates||SAMPLE_FALLBACK_TEMPLATES).slice(0,6).map(t => (
+                <button key={t.id} className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50" onClick={()=>{ onPickTemplate?.(t); setOpen(false); }}>{t.name}</button>
+              ))}
+            </div>
+          )}
+          {submenu==='create' && (
+            <div className="absolute left-[14rem] top-24 w-64 bg-white rounded-xl shadow-lg p-2">
+              <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50" onClick={()=>{ onNewBlank?.(); setOpen(false); }}>Blank Document</button>
+              <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50" onClick={()=> alert('AI generation coming soon')}>Generate with AI</button>
+            </div>
+          )}
         </div>
       )}
     </div>

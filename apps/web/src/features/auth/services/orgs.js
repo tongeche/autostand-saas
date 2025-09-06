@@ -52,7 +52,7 @@ export async function getOrgSettings(orgId){
 
 export async function recordInvite(orgId, email, role='member'){
   // Use app_users as a lightweight invite registry
-  const row = { id: crypto.randomUUID(), tenant_id: orgId, email, role };
+  const row = { id: crypto.randomUUID(), org_id: orgId, email, role };
   const { data, error } = await supabase
     .from('app_users')
     .insert([row])

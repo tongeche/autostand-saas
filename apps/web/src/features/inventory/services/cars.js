@@ -1,13 +1,13 @@
 import { supabase } from "../../../lib/supabase";
 import { getTenantId } from "../../../lib/tenant";
 
-const TID = () => getTenantId();
+const ORG = () => getTenantId();
 
 // Insert many car rows into public.cars (or your schema) with tenant scoping
 // Columns we are confident exist (extend safely as your schema grows)
 const SAFE_COLUMNS = new Set([
   // core identifiers
-  "tenant_id", "plate", "brand", "model", "version",
+  "org_id", "plate", "brand", "model", "version",
   // dates + meta
   "first_reg", "first_reg_pt", "days_in_stock", "status",
   // specs
@@ -16,8 +16,8 @@ const SAFE_COLUMNS = new Set([
   "expenses", "sale_price", "purchase_price", "total_with_expenses",
 ]);
 
-function sanitizeRow(row, tenant_id){
-  const out = { tenant_id };
+function sanitizeRow(row, org_id){
+  const out = { org_id };
   for (const [k, v] of Object.entries(row || {})){
     if (v == null || v === "") continue;
     if (SAFE_COLUMNS.has(k)) out[k] = v;
@@ -27,10 +27,10 @@ function sanitizeRow(row, tenant_id){
 
 export async function insertCars(rows = []){
   if (!supabase) throw new Error("Supabase not initialised");
-  const tenant_id = TID();
-  if (!tenant_id) throw new Error("Missing tenant id");
+  const org_id = ORG();
+  if (!org_id) throw new Error("Missing org id");
   if (!Array.isArray(rows) || rows.length === 0) return { inserted: 0 };
-  let payload = rows.map(r => sanitizeRow(r, tenant_id));
+  let payload = rows.map(r => sanitizeRow(r, org_id));
   // Retry logic: if a column is rejected by the database, strip it and retry (max 4 unknowns)
   let attempt = 0;
   while (attempt < 4){
@@ -52,8 +52,8 @@ export async function insertCars(rows = []){
 // List cars for tenant with optional simple search
 export async function listCars({ q = "", limit = 50, offset = 0 } = {}){
   if (!supabase) throw new Error("Supabase not initialised");
-  const tenant_id = TID();
-  if (!tenant_id) throw new Error("Missing tenant id");
+  const org_id = ORG();
+  if (!org_id) throw new Error("Missing org id");
   let query = supabase
     .from("cars")
     .select(
@@ -61,7 +61,7 @@ export async function listCars({ q = "", limit = 50, offset = 0 } = {}){
       "id, plate, brand, model, version, first_reg, first_reg_pt, days_in_stock, status, cc, hp, km, fuel, expenses, sale_price, purchase_price, total_with_expenses, created_at",
       { count: "exact" }
     )
-    .eq("tenant_id", tenant_id)
+    .eq("org_id", org_id)
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -80,12 +80,12 @@ export async function listCars({ q = "", limit = 50, offset = 0 } = {}){
 // List rows from the staging table with exact CSV headers
 export async function listCarsStaging({ limit = 500, offset = 0 } = {}){
   if (!supabase) throw new Error("Supabase not initialised");
-  const tenant_id = TID();
+  const org_id = ORG();
   let q = supabase
     .from('cars_import_staging')
     .select('*', { count: 'exact' })
     .range(offset, offset + limit - 1);
-  if (tenant_id) q = q.eq('tenant_id', tenant_id);
+  if (org_id) q = q.eq('org_id', org_id);
   const { data, error, count } = await q;
   if (error) throw error;
   return { rows: data || [], total: count || 0 };
@@ -108,9 +108,9 @@ export async function insertCarsCsvStaging(headers = [], rows = [], source = 'cs
   if (!supabase) throw new Error("Supabase not initialised");
   if (!Array.isArray(headers) || headers.length === 0) throw new Error("CSV missing headers");
   if (!Array.isArray(rows) || rows.length === 0) return { inserted: 0 };
-  const tenant_id = TID();
+  const org_id = ORG();
   const payload = rows.map(r => {
-    const obj = { source, tenant_id };
+    const obj = { source, org_id };
     headers.forEach((h, i) => { obj[h] = r[i] ?? null; });
     return obj;
   });

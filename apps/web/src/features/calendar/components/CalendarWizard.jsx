@@ -20,7 +20,7 @@ export default function CalendarWizard({ open, onClose, onCreated, initialType='
       const { data } = await supabase
         .from('leads')
         .select('id,name,plate,created_at')
-        .eq('tenant_id', getTenantId())
+        .eq('org_id', getTenantId())
         .order('created_at', { ascending:false })
         .limit(50);
       setLeads(data||[]);

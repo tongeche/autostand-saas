@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RespondWizard } from "./respond_wizard";
 import TaskWizard from "./TaskWizard";
-import { fetchLeadTasks, createLeadTask, updateLeadTask, toggleLeadTaskDone, deleteLeadTask } from "../services/supabase";
+import { fetchLeadTasks, fetchLeadActivity, fetchLeadNotes, createLeadTask, updateLeadTask, toggleLeadTaskDone, deleteLeadTask } from "../services/supabase";
 
 import {
   FiX, FiSave, FiTrash2, FiPlus,
@@ -120,17 +120,14 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
       status: lead.status || "new",
     });
     (async () => {
-      const [n, a, t] = await Promise.all([
-        supabase.from("lead_notes")
-          .select("id,body,created_at").eq("tenant_id", getTenantId()).eq("lead_id", lead.id)
-          .order("created_at", { ascending: false }),
-        supabase.from("lead_activity")
-          .select("type, created_at").eq("tenant_id", getTenantId()).eq("lead_id", lead.id)
-          .in("type", ["call","sms","email"]).order("created_at", { ascending: false }).limit(1),
+      const [n, acts, t] = await Promise.all([
+        fetchLeadNotes(lead.id),
+        fetchLeadActivity(lead.id, { limit: 50 }),
         fetchLeadTasks(lead.id, { onlyOpen: taskFilter === 'open', overdue: taskFilter === 'overdue' })
       ]);
-      setNotes(n.error ? [] : (n.data || []));
-      if (!a.error && a.data && a.data[0]) setLastContact(new Date(a.data[0].created_at)); else setLastContact(null);
+      setNotes(Array.isArray(n) ? n : []);
+      const last = (acts || []).find(ev => ev.type === 'contact');
+      setLastContact(last ? new Date(last.created_at) : null);
       setTasks(Array.isArray(t) ? t : []);
     })();
     // default assignee mode when opening lead
@@ -188,11 +185,8 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
     if (!body) return;
     try {
       setBusy(true);
-      const ins = await supabase
-        .from("lead_notes")
-        .insert([{ tenant_id: getTenantId(), lead_id: lead.id, body }])
-        .select().single();
-      setNotes((prev) => [ins.data, ...prev]);
+      const ins = await addNote(lead.id, body);
+      setNotes((prev) => [ins, ...prev]);
       onChanged?.("note");
       setTimeout(() => notesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
     } finally { setBusy(false); }

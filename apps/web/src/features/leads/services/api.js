@@ -8,12 +8,12 @@ import { getTenantId } from "../../../lib/tenant";
 export async function fetchLeads({ search = "", limit = 50, offset = 0 } = {}) {
   if (!supabase) throw new Error("supabase not initialised");
   const tenantId = getTenantId();
-  if (!tenantId) throw new Error("tenant_id missing");
+  if (!tenantId) throw new Error("org_id missing");
 
   let q = supabase
     .from("leads")
     .select("id, name, phone, email, status, stage_id, created_at", { count: "exact" })
-    .eq("tenant_id", tenantId)
+    .eq("org_id", tenantId)
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 

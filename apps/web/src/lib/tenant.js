@@ -7,7 +7,8 @@ export function getTenantId() {
   } catch {}
   // Do NOT fallback to a test tenant in production
   if (import.meta && import.meta.env && import.meta.env.DEV) {
-    return import.meta.env.VITE_DEV_TENANT_ID || null;
+    // Support both legacy and new env var names during migration
+    return import.meta.env.VITE_DEV_ORG_ID || import.meta.env.VITE_DEV_TENANT_ID || null;
   }
   return null;
 }

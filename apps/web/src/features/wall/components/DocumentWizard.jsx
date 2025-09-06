@@ -35,7 +35,7 @@ export default function DocumentWizard({ open, onClose, onCreate, initialType = 
         const { data, error } = await supabase
           .from('leads')
           .select('name, updated_at')
-          .eq('tenant_id', getTenantId())
+          .eq('org_id', getTenantId())
           .eq('plate', plate)
           .order('updated_at', { ascending: false })
           .limit(1);
