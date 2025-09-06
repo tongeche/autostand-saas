@@ -72,10 +72,17 @@ export default function DocumentManager(){
   }, [orgId]);
 
   // open wizard from URL (?new=car|checklist|blank)
+  const [wizardLeadId, setWizardLeadId] = useState(null);
   useEffect(()=>{
     const params = new URLSearchParams(location.search);
     const kind = params.get('new');
-    if (kind){ setWizardOpen(true); const next = new URLSearchParams(location.search); next.delete('new'); navigate({ search: next.toString() }, { replace: true }); }
+    const lid = params.get('lead');
+    if (kind){
+      setWizardLeadId(lid || null);
+      setWizardOpen(true);
+      const next = new URLSearchParams(location.search); next.delete('new'); next.delete('lead');
+      navigate({ search: next.toString() }, { replace: true });
+    }
   }, []);
 
   async function openEditorFromTemplate(tpl, lead){
@@ -139,7 +146,7 @@ export default function DocumentManager(){
         />
       )}
 
-      <DocumentWizard initialType={'blank'} open={wizardOpen} onClose={()=> setWizardOpen(false)} onCreate={({ title, body, ctx, type })=>{
+      <DocumentWizard initialType={'blank'} initialLeadId={wizardLeadId} open={wizardOpen} onClose={()=> setWizardOpen(false)} onCreate={({ title, body, ctx, type })=>{
         setEditor({ title, body, ctx, type });
         setEditorOpen(true);
         setWizardOpen(false);

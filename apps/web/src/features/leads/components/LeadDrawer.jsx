@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { RespondWizard } from "./respond_wizard";
 import TaskWizard from "./TaskWizard";
 import { fetchLeadTasks, fetchLeadActivity, fetchLeadNotes, createLeadTask, updateLeadTask, toggleLeadTaskDone, deleteLeadTask } from "../services/supabase";
@@ -95,6 +96,7 @@ function toLocalInputValue(iso) {
 
 /* ────────────────── Drawer ────────────────── */
 export default function LeadDrawer({ open, lead, onClose, onChanged }) {
+  const navigate = useNavigate();
   const panelRef = useRef(null);
   const notesRef = useRef(null);
 
@@ -221,7 +223,12 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
   };
 
   const openReminder = () => alert("Reminder setup (todo)");
-  const openSendPDF = () => setRespondOpen(true);
+  const openSendPDF = () => {
+    try {
+      if (lead?.id) navigate(`/wall?new=car&lead=${lead.id}`);
+      else navigate('/wall?new=car');
+    } catch { setRespondOpen(true); }
+  };
   const openSource = () => {
     const href = form?.source;
     if (!href) return;

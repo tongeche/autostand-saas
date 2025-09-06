@@ -3,8 +3,9 @@ import { FiX, FiChevronDown, FiFilePlus } from "react-icons/fi";
 import { listStagingPlates, listCarsStaging } from "../../inventory/services/cars";
 import { supabase } from "../../../lib/supabase";
 import { getTenantId } from "../../../lib/tenant";
+import { assembleDocContext } from "../services/context";
 
-export default function DocumentWizard({ open, onClose, onCreate, initialType = 'blank' }){
+export default function DocumentWizard({ open, onClose, onCreate, initialType = 'blank', initialLeadId = null }){
   const [type, setType] = useState(initialType); // blank | checklist | car
   const [title, setTitle] = useState('Untitled Document');
   const [titleTouched, setTitleTouched] = useState(false);
@@ -12,20 +13,28 @@ export default function DocumentWizard({ open, onClose, onCreate, initialType = 
   const [plate, setPlate] = useState('');
   const [cars, setCars] = useState([]);
   const [leadName, setLeadName] = useState('');
+  const [leadId, setLeadId] = useState(initialLeadId);
 
   useEffect(()=>{
     if (!open) return;
     setType(initialType || 'blank');
     setTitle('Untitled Document');
     setTitleTouched(false);
-    setPlate(''); setLeadName('');
+    setPlate(''); setLeadName(''); setLeadId(initialLeadId || null);
     (async ()=>{
       try { const p = await listStagingPlates(); setPlates(p||[]); }
       catch { setPlates([]); }
       try { const { rows } = await listCarsStaging({}); setCars(rows||[]); }
       catch { setCars([]); }
+      // If leadId provided, prefill plate and name
+      if (initialLeadId){
+        try{
+          const { data } = await supabase.from('leads').select('name,plate').eq('id', initialLeadId).maybeSingle();
+          if (data){ setLeadName(data.name || ''); setPlate(data.plate || ''); setType(initialType || 'car'); }
+        }catch{}
+      }
     })();
-  }, [open, initialType]);
+  }, [open, initialType, initialLeadId]);
 
   // When plate is selected, try to auto-detect a lead with that plate
   useEffect(()=>{
@@ -62,6 +71,23 @@ export default function DocumentWizard({ open, onClose, onCreate, initialType = 
 
   function create(){
     if (type === 'car'){
+      if (leadId){
+        (async ()=>{
+          try{
+            const ctx = await assembleDocContext({ leadId });
+            const body = [
+              `Olá {{lead.name}},`,
+              '',
+              'Segue a ficha do veículo e informações principais.',
+              '',
+              '—',
+            ].join('\n');
+            onCreate?.({ title: title || 'Ficha de Veículo', body, type, ctx });
+            onClose?.();
+          }catch(e){ alert(e?.message || 'Failed to prepare context'); }
+        })();
+        return;
+      }
       const row = (cars||[]).find(r => r['Matrícula'] === plate) || {};
       const ctx = {
         client: { name: leadName || 'Cliente' },
@@ -91,6 +117,21 @@ export default function DocumentWizard({ open, onClose, onCreate, initialType = 
       return;
     }
     if (type === 'checklist'){
+      if (leadId){
+        (async ()=>{
+          try{
+            const ctx = await assembleDocContext({ leadId });
+            const body = [
+              `Olá {{lead.name}},`,
+              '',
+              'Checklist de estado e preparação da viatura.',
+            ].join('\n');
+            onCreate?.({ title: title || 'Checklist', body, type, ctx });
+            onClose?.();
+          }catch(e){ alert(e?.message || 'Failed to prepare context'); }
+        })();
+        return;
+      }
       const row = (cars||[]).find(r => r['Matrícula'] === plate) || {};
       const ctx = {
         client: { name: leadName || 'Cliente' },
@@ -161,7 +202,7 @@ export default function DocumentWizard({ open, onClose, onCreate, initialType = 
 
           <div className="flex items-center justify-end gap-2 pt-1">
             <button className="px-3 py-2 rounded border" onClick={onClose}>Cancel</button>
-            <button className="px-3 py-2 rounded bg-gray-900 text-white" onClick={create} disabled={(type==='car' || type==='checklist') && !plate}>Create</button>
+            <button className="px-3 py-2 rounded bg-gray-900 text-white" onClick={create} disabled={(type==='car' || type==='checklist') && !leadId && !plate}>Create</button>
           </div>
         </div>
       </div>
