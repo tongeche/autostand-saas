@@ -6,7 +6,7 @@ export default function LandingPage(){
     <div className="min-h-screen bg-[#eaf5ee]">
       {/* Top nav white bar */}
 
-      <div className="bg-white border-b">
+      <div className="bg-white">
         <nav className="w-full max-w-7xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between">
           <div className="text-2xl md:text-3xl font-bold tracking-tight">Leads<span className="text-primary">+</span></div>
           <div className="hidden md:flex items-center gap-6 text-base text-slate-700">
@@ -39,7 +39,7 @@ export default function LandingPage(){
 
       {/* Preview panel — replace with a large screenshot image */}
       <section className="px-4 md:px-6 pb-16">
-        <div className="max-w-6xl mx-auto rounded-3xl shadow-lg bg-white/80 backdrop-blur border p-2 md:p-3">
+        <div className="max-w-6xl mx-auto rounded-3xl shadow-lg bg-white/80 backdrop-blur p-2 md:p-3">
           <img
             src="/landing-screenshot.svg"
             alt="Leads+ app preview"

@@ -27,7 +27,7 @@ export default function SignupPage(){
 
   return (
     <div className="min-h-[60vh] grid place-items-center p-6">
-      <form onSubmit={signup} className="w-full max-w-sm bg-white rounded-2xl border shadow-sm p-4 space-y-3">
+      <form onSubmit={signup} className="w-full max-w-sm bg-white rounded-2xl shadow p-4 space-y-3">
         <div className="text-lg font-semibold">Create account</div>
         {msg && <div className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded p-2">{msg}</div>}
         <label className="text-sm block">
@@ -46,4 +46,3 @@ export default function SignupPage(){
     </div>
   );
 }
-

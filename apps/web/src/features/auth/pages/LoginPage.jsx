@@ -26,7 +26,7 @@ export default function LoginPage(){
 
   return (
     <div className="min-h-[60vh] grid place-items-center p-6">
-      <form onSubmit={login} className="w-full max-w-sm bg-white rounded-2xl border shadow-sm p-4 space-y-3">
+      <form onSubmit={login} className="w-full max-w-sm bg-white rounded-2xl shadow p-4 space-y-3">
         <div className="text-lg font-semibold">Sign in</div>
         {msg && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2">{msg}</div>}
         <label className="text-sm block">
@@ -45,4 +45,3 @@ export default function LoginPage(){
     </div>
   );
 }
-
