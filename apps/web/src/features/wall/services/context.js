@@ -24,6 +24,8 @@ export async function assembleDocContext({ leadId, orgId = getTenantId(), userId
         .eq('user_id', uid)
         .maybeSingle();
       ctx.owner = { id: uid, name: p?.full_name || userData?.user?.email || 'Owner', avatar_url: p?.avatar_url || '' };
+      // Alias for templates using {{agent.*}}
+      ctx.agent = { ...ctx.owner };
     }
   }catch{}
 
@@ -33,6 +35,8 @@ export async function assembleDocContext({ leadId, orgId = getTenantId(), userId
       const { data: orgRow } = await supabase.from('orgs').select('id,name').eq('id', orgId).maybeSingle();
       const { data: settings } = await supabase.from('org_settings').select('brand_name').eq('org_id', orgId).maybeSingle();
       ctx.org = { id: orgId, name: settings?.brand_name || orgRow?.name || 'Organization' };
+      // Alias for templates using {{stand.*}}
+      ctx.stand = { ...ctx.org };
     }
   }catch{}
 
@@ -46,7 +50,11 @@ export async function assembleDocContext({ leadId, orgId = getTenantId(), userId
         .eq('id', leadId)
         .maybeSingle();
       lead = data || null;
-      if (lead){ ctx.lead = { id: lead.id, name: lead.name || '', email: lead.email || '', phone: lead.phone || '', plate: lead.plate || '' }; }
+      if (lead){
+        ctx.lead = { id: lead.id, name: lead.name || '', email: lead.email || '', phone: lead.phone || '', plate: lead.plate || '' };
+        // Alias for templates using {{client.*}}
+        ctx.client = { name: ctx.lead.name, email: ctx.lead.email, phone: ctx.lead.phone, plate: ctx.lead.plate };
+      }
     }
   }catch{}
 

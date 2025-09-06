@@ -86,11 +86,23 @@ export default function DocumentWizard({ open, onClose, onCreate, initialType = 
           try{
             const ctx = await assembleDocContext({ leadId });
             const defaultBody = [
-              `Olá {{lead.name}},`,
+              'Olá {{client.name}},',
               '',
-              'Segue a ficha do veículo e informações principais.',
+              'Obrigado pelo seu contacto e pelo interesse no {{car.brand}} {{car.model}} ({{car.year}}).',
+              'Este veículo destaca-se pelo seu excelente estado, baixo consumo e fiabilidade reconhecida.',
               '',
-              '—',
+              'Gostaria de lhe dar mais informações:',
+              '- Quilometragem: {{car.mileage}} km',
+              '- Combustível: {{car.fuel}}',
+              '- Extras: {{car.extras}}',
+              '',
+              'Podemos agendar uma visita ao stand para que veja o carro de perto e, se desejar, faça um test-drive sem compromisso.',
+              '',
+              'Qual a melhor altura para si?',
+              '',
+              'Cumprimentos,',
+              '{{agent.name}}',
+              '{{stand.name}}'
             ].join('\n');
             const chosen = templates.find(t => String(t.id) === String(tplId));
             const body = chosen?.body || defaultBody;
@@ -118,11 +130,23 @@ export default function DocumentWizard({ open, onClose, onCreate, initialType = 
         dealer: { name:'Autotrust' }
       };
       const defaultBody = [
-        `Olá {{client.name}},`,
+        'Olá {{client.name}},',
         '',
-        'Segue a ficha do veículo e informações principais.',
+        'Obrigado pelo seu contacto e pelo interesse no {{car.brand}} {{car.model}} ({{car.year}}).',
+        'Este veículo destaca-se pelo seu excelente estado, baixo consumo e fiabilidade reconhecida.',
         '',
-        '—',
+        'Gostaria de lhe dar mais informações:',
+        '- Quilometragem: {{car.mileage}} km',
+        '- Combustível: {{car.fuel}}',
+        '- Extras: {{car.extras}}',
+        '',
+        'Podemos agendar uma visita ao stand para que veja o carro de perto e, se desejar, faça um test-drive sem compromisso.',
+        '',
+        'Qual a melhor altura para si?',
+        '',
+        'Cumprimentos,',
+        '{{agent.name}}',
+        '{{stand.name}}'
       ].join('\n');
       const chosen = templates.find(t => String(t.id) === String(tplId));
       const body = chosen?.body || defaultBody;
