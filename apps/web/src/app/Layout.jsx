@@ -8,6 +8,7 @@ import QuickTaskModal from "../features/todos/components/QuickTaskModal.jsx";
 import FindAssetModal from "../features/inventory/components/FindAssetModal.jsx";
 import { supabase } from "../lib/supabase";
 import { useSupabaseSession } from "../lib/auth";
+import { listDeliverable, markRead } from "../features/notifications/services/notifications";
 
 /** CONFIG */
 const DEBUG = false; // flip to true to see mode/open badges in the topbar
@@ -53,6 +54,8 @@ export default function Layout() {
   const session = useSupabaseSession();
   const [orgName, setOrgName] = useState("");
   const [profile, setProfile] = useState({ avatar_url: "", full_name: "", email: "" });
+  const [notifs, setNotifs] = useState([]);
+  const [notifOpen, setNotifOpen] = useState(false);
   // If logged in but has no memberships, redirect to onboard (client-side check)
   useEffect(()=>{
     (async ()=>{
@@ -129,6 +132,16 @@ export default function Layout() {
     else b.classList.remove("lock-scroll");
     return () => b.classList.remove("lock-scroll");
   }, [isDesktop, mobileOpen]);
+
+  // Poll deliverable notifications while logged in
+  useEffect(()=>{
+    let timer;
+    async function load(){
+      try { const rows = await listDeliverable({ onlyUnread:true, limit:20 }); setNotifs(rows); } catch {}
+    }
+    if (session){ load(); timer = setInterval(load, 30000); }
+    return ()=> timer && clearInterval(timer);
+  }, [session]);
 
   // Close the plus dropdown on outside click / escape
   useEffect(() => {
@@ -219,6 +232,30 @@ export default function Layout() {
                   {isDesktop ? "desktop" : "mobile"} | open:{String(open)}
                 </span>
               )}
+              {/* Notifications bell */}
+              <div className="relative">
+                <button className="icon-btn min-h-[40px] relative" onClick={()=> setNotifOpen(v=>!v)} aria-label="Notifications">
+                  🛎️
+                  {notifs.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-[10px] px-1">{notifs.length}</span>}
+                </button>
+                {notifOpen && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border z-50 p-2">
+                    <div className="text-sm font-medium px-2 py-1">Notifications</div>
+                    <div className="max-h-72 overflow-auto">
+                      {(notifs||[]).length === 0 ? (
+                        <div className="px-2 py-4 text-sm text-slate-500">No new notifications</div>
+                      ) : (notifs.map(n => (
+                        <div key={n.id} className="px-2 py-2 rounded-lg hover:bg-slate-50">
+                          <div className="text-sm font-medium">{n.title}</div>
+                          {n.body && <div className="text-xs text-slate-600">{n.body}</div>}
+                          <div className="mt-1 text-xs text-slate-500">{new Date(n.deliver_at).toLocaleString()}</div>
+                          <div className="mt-2"><button className="text-xs underline" onClick={async()=>{ await markRead(n.id); setNotifs(prev => prev.filter(x=> x.id !== n.id)); }}>Mark read</button></div>
+                        </div>
+                      )))}
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="relative" ref={plusRef}>
                 <button className="icon-btn min-h-[40px]" onClick={()=> setPlusOpen(v=>!v)}>+</button>
                 {plusOpen && (
@@ -229,7 +266,7 @@ export default function Layout() {
                     <MenuItem label="Add Inventory" onClick={()=>{ setPlusOpen(false); navigate('/inventory?import=1'); }} />
                     <MenuItem label="Add Lead" onClick={()=>{ setPlusOpen(false); setAddLeadOpen(true); }} />
                     <MenuItem label="Set Reminder" onClick={()=>{ setPlusOpen(false); setQuickDefaults({ title: 'Reminder', due: new Date(Date.now()+60*60*1000) }); setQuickTaskOpen(true); }} />
-                    <MenuItem label="Calendar" onClick={()=>{ setPlusOpen(false); navigate('/todos?view=timeline'); }} />
+                    <MenuItem label="Calendar" onClick={()=>{ setPlusOpen(false); navigate('/calendar'); }} />
                     <MenuItem label="Send PDF" onClick={()=>{ setPlusOpen(false); navigate('/wall?new=car'); }} />
                   </div>
                 )}
