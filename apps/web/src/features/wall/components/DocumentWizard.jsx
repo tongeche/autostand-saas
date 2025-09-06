@@ -14,6 +14,8 @@ export default function DocumentWizard({ open, onClose, onCreate, initialType = 
   const [cars, setCars] = useState([]);
   const [leadName, setLeadName] = useState('');
   const [leadId, setLeadId] = useState(initialLeadId);
+  const [templates, setTemplates] = useState([]);
+  const [tplId, setTplId] = useState('');
 
   useEffect(()=>{
     if (!open) return;
@@ -26,6 +28,14 @@ export default function DocumentWizard({ open, onClose, onCreate, initialType = 
       catch { setPlates([]); }
       try { const { rows } = await listCarsStaging({}); setCars(rows||[]); }
       catch { setCars([]); }
+      // Load templates to allow prefill
+      try{
+        const { data: tpls } = await supabase
+          .from('templates')
+          .select('id,name,category,subject,body')
+          .order('name', { ascending: true });
+        setTemplates(Array.isArray(tpls) ? tpls : []);
+      }catch{ setTemplates([]); }
       // If leadId provided, prefill plate and name
       if (initialLeadId){
         try{
@@ -75,14 +85,16 @@ export default function DocumentWizard({ open, onClose, onCreate, initialType = 
         (async ()=>{
           try{
             const ctx = await assembleDocContext({ leadId });
-            const body = [
+            const defaultBody = [
               `Olá {{lead.name}},`,
               '',
               'Segue a ficha do veículo e informações principais.',
               '',
               '—',
             ].join('\n');
-            onCreate?.({ title: title || 'Ficha de Veículo', body, type, ctx });
+            const chosen = templates.find(t => String(t.id) === String(tplId));
+            const body = chosen?.body || defaultBody;
+            onCreate?.({ title: (title || chosen?.name || 'Ficha de Veículo'), body, type, ctx });
             onClose?.();
           }catch(e){ alert(e?.message || 'Failed to prepare context'); }
         })();
@@ -105,14 +117,16 @@ export default function DocumentWizard({ open, onClose, onCreate, initialType = 
         },
         dealer: { name:'Autotrust' }
       };
-      const body = [
+      const defaultBody = [
         `Olá {{client.name}},`,
         '',
         'Segue a ficha do veículo e informações principais.',
         '',
         '—',
       ].join('\n');
-      onCreate?.({ title: title || 'Ficha de Veículo', body, type, ctx });
+      const chosen = templates.find(t => String(t.id) === String(tplId));
+      const body = chosen?.body || defaultBody;
+      onCreate?.({ title: (title || chosen?.name || 'Ficha de Veículo'), body, type, ctx });
       onClose?.();
       return;
     }
@@ -121,12 +135,14 @@ export default function DocumentWizard({ open, onClose, onCreate, initialType = 
         (async ()=>{
           try{
             const ctx = await assembleDocContext({ leadId });
-            const body = [
+            const defaultBody = [
               `Olá {{lead.name}},`,
               '',
               'Checklist de estado e preparação da viatura.',
             ].join('\n');
-            onCreate?.({ title: title || 'Checklist', body, type, ctx });
+            const chosen = templates.find(t => String(t.id) === String(tplId));
+            const body = chosen?.body || defaultBody;
+            onCreate?.({ title: (title || chosen?.name || 'Checklist'), body, type, ctx });
             onClose?.();
           }catch(e){ alert(e?.message || 'Failed to prepare context'); }
         })();
@@ -171,6 +187,20 @@ export default function DocumentWizard({ open, onClose, onCreate, initialType = 
           <button className="p-2 rounded border" onClick={onClose}><FiX/></button>
         </div>
         <div className="p-4 space-y-3">
+          {/* Start from template */}
+          <label className="text-sm block">
+            <div className="text-slate-600 mb-1">Start from template</div>
+            <select className="w-full rounded-lg border px-3 py-2 text-sm" value={tplId} onChange={(e)=>{
+              const id = e.target.value; setTplId(id);
+              const t = templates.find(x => String(x.id) === String(id));
+              if (t){ if (!titleTouched) setTitle(t.name || title); }
+            }}>
+              <option value="">— None —</option>
+              {(templates||[]).map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </label>
           {type === 'car' && (
             <label className="text-sm block">
               <div className="text-slate-600 mb-1">Lead Name (saudação)</div>
