@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  FiUsers, FiCheckSquare, FiGrid, FiBox, FiSearch, FiMenu,
+  FiUsers, FiCheckSquare, FiGrid, FiBox, FiSearch, FiMenu, FiCalendar, FiFileText, FiSettings
 } from "react-icons/fi";
 import AddLeadWizard from "../features/leads/components/AddLeadWizard.jsx";
 import QuickTaskModal from "../features/todos/components/QuickTaskModal.jsx";
@@ -51,6 +51,7 @@ export default function Layout() {
   const [findAssetOpen, setFindAssetOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const session = useSupabaseSession();
+  const [orgName, setOrgName] = useState("");
   // If logged in but has no memberships, redirect to onboard (client-side check)
   useEffect(()=>{
     (async ()=>{
@@ -68,9 +69,38 @@ export default function Layout() {
           const path = window.location.pathname;
           if (!/\/onboard|\/login|\/signup/.test(path)) navigate('/onboard');
         }
+        // Persist current org in localStorage for data filters
+        try { window.localStorage.setItem('org_id', ms[0].org_id); } catch {}
       }catch{}
     })();
   }, [session, navigate]);
+
+  // Fetch current org name (brand_name if available) for header branding
+  useEffect(()=>{
+    (async ()=>{
+      try{
+        if (!session) { setOrgName(""); return; }
+        const { data: userData } = await supabase.auth.getUser();
+        const uid = userData?.user?.id; if (!uid) { setOrgName(""); return; }
+        const { data: ms } = await supabase
+          .from('org_members')
+          .select('org_id, orgs(name)')
+          .eq('user_id', uid)
+          .order('joined_at', { ascending: true })
+          .limit(1);
+        if (!ms || !ms[0]) { setOrgName(""); return; }
+        const orgId = ms[0].org_id;
+        // Try brand first
+        const { data: brand } = await supabase
+          .from('org_settings')
+          .select('brand_name')
+          .eq('org_id', orgId)
+          .maybeSingle();
+        const name = (brand?.brand_name || ms[0]?.orgs?.name || "").trim();
+        setOrgName(name);
+      }catch{ setOrgName(""); }
+    })();
+  }, [session]);
 
   // When switching to desktop, close mobile drawer but do NOT change sidebar open state
   useEffect(() => {
@@ -125,7 +155,7 @@ export default function Layout() {
       {/* DESKTOP SIDEBAR (explicitly gated by isDesktop) */}
       {isDesktop && (
         <aside className={`${open ? "w-72" : "w-16"} sidebar transition-all duration-200 flex flex-col`}>
-          <SidebarHeader open={open} onToggle={() => setOpen(v => !v)} />
+          <SidebarHeader open={open} onToggle={() => setOpen(v => !v)} orgName={orgName} />
           <SidebarNav open={open} />
           {open && <SidebarOnboarding />}
         </aside>
@@ -204,7 +234,7 @@ export default function Layout() {
                   </button>
                   {userMenuOpen && (
                     <div className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-lg border z-50">
-                      <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={async ()=>{ setUserMenuOpen(false); await supabase.auth.signOut(); navigate('/login'); }}>Logout</button>
+                      <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={async ()=>{ setUserMenuOpen(false); try{ window.localStorage.removeItem('org_id'); }catch{} await supabase.auth.signOut(); navigate('/login'); }}>Logout</button>
                     </div>
                   )}
                 </div>
@@ -245,12 +275,12 @@ function MenuItem({ label, onClick }){
 
 /* ───────── Sidebar pieces ───────── */
 
-function SidebarHeader({ open, onToggle, closeLabel }) {
+function SidebarHeader({ open, onToggle, closeLabel, orgName }) {
   return (
     <div className="p-4 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <div className="text-lg font-bold">AutoStand</div>
-        {open && <span className="badge">v2</span>}
+        <div className="text-lg font-bold">{orgName || 'AutoStand'}</div>
+        {open && !orgName && <span className="badge">v2</span>}
       </div>
       <button
         onClick={onToggle}
@@ -280,8 +310,9 @@ function SidebarNav({ open, onNavigate }) {
         <Item to="/leads" icon={<FiUsers />} label="Leads" open={open} onClick={onNavigate} />
         <Item to="/todos" icon={<FiCheckSquare />} label="Tasks" open={open} onClick={onNavigate} />
         <Item to="/inventory" icon={<FiBox />} label="Inventory" open={open} onClick={onNavigate} />
-        <Item to="/calendar" icon={<FiGrid />} label="Calendar" open={open} onClick={onNavigate} />
-        <Item to="/wall" icon={<FiGrid />} label="Documents" open={open} onClick={onNavigate} />
+        <Item to="/calendar" icon={<FiCalendar />} label="Calendar" open={open} onClick={onNavigate} />
+        <Item to="/wall" icon={<FiFileText />} label="Documents" open={open} onClick={onNavigate} />
+        <Item to="/settings" icon={<FiSettings />} label="Settings" open={open} onClick={onNavigate} />
       </nav>
     </>
   );
@@ -290,10 +321,10 @@ function SidebarNav({ open, onNavigate }) {
 function SidebarOnboarding() {
   return (
     <div className="mt-auto p-3 text-xs text-slate-600">
-      <div className="card p-3">
+      <NavLink to="/settings" className={({isActive})=>`card p-3 block ${isActive ? 'ring-1 ring-accent' : ''}`}>
         <div className="font-semibold text-primary">Onboarding</div>
         <div className="text-[12px] mt-1">Finish setup to unlock automations.</div>
-      </div>
+      </NavLink>
     </div>
   );
 }
