@@ -1,16 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { FiChevronLeft, FiChevronRight, FiSearch, FiUpload, FiDownload, FiMoreHorizontal } from "react-icons/fi";
+import { FiSearch, FiUpload, FiDownload, FiMoreHorizontal } from "react-icons/fi";
 import InventoryCsvImportModal from "../components/InventoryCsvImportModal.jsx";
 import { insertCarsCsvStaging, listCarsStaging } from "../services/cars";
 
 export default function InventoryPage(){
-  const [navOpen, setNavOpen] = useState(true); // collapsible inner side menu
   const location = useLocation();
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [importOpen, setImportOpen] = useState(false);
-  const [rows, setRows] = useState(() => demoVehicleRows);
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -19,7 +18,7 @@ export default function InventoryPage(){
       // Load from staging table and map to normalized fields used in UI
       const { rows: raw } = await listCarsStaging({});
       const mapped = raw.map(mapStagingRow);
-      setRows(mapped.length ? mapped : demoVehicleRows);
+      setRows(mapped);
     } catch(e){ setErr(e.message || String(e)); }
     finally { setLoading(false); }
   }
@@ -43,32 +42,9 @@ export default function InventoryPage(){
   }, []);
 
   return (
-    <div className="flex gap-4">
-      {/* Inner side menu */}
-      <aside className={`${navOpen ? 'w-60' : 'w-14'} transition-all duration-200 shrink-0`}>
-        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between p-3 border-b">
-            <div className="font-medium">{navOpen ? 'My Store' : '•'}</div>
-            <button className="icon-btn" onClick={()=> setNavOpen(v=>!v)} aria-label="Toggle">
-              {navOpen ? <FiChevronLeft/> : <FiChevronRight/>}
-            </button>
-          </div>
-          <nav className="p-2 text-sm">
-            <NavItem active label="Inventory" open={navOpen}/>
-            <NavItem label="Products" open={navOpen}/>
-            <NavItem label="Orders" open={navOpen}/>
-            <div className="h-px my-2 bg-slate-200"/>
-            <NavItem label="Discount" open={navOpen}/>
-            <NavItem label="Customers" open={navOpen}/>
-            <NavItem label="Analytics" open={navOpen}/>
-            <NavItem label="Marketing" open={navOpen}/>
-            <NavItem label="Settings" open={navOpen}/>
-          </nav>
-        </div>
-      </aside>
-
+    <div className="w-full space-y-3">
       {/* Main content */}
-      <section className="flex-1 space-y-3">
+      <section className="space-y-3">
         {/* Header row */}
         <div className="flex items-center justify-between">
           <div className="text-xl font-semibold">Inventory</div>
@@ -79,34 +55,23 @@ export default function InventoryPage(){
           </div>
         </div>
 
-        {/* Top metrics row */}
+        {/* Metrics (computed) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="bg-white rounded-xl border shadow-sm p-4">
-            <div className="text-slate-600 text-sm">Total Asset Value</div>
-            <div className="text-3xl font-semibold mt-1">$10,356,788</div>
+          <div className="bg-white rounded-xl shadow-sm p-4">
+            <div className="text-slate-600 text-sm">Total vehicles</div>
+            <div className="text-3xl font-semibold mt-1">{rows.length.toLocaleString()}</div>
           </div>
-          <div className="bg-white rounded-xl border shadow-sm p-4">
-            <div className="flex items-center justify-between">
-              <div className="text-slate-600 text-sm">Products</div>
-              <div className="text-lg font-semibold">2379</div>
-            </div>
-            <div className="mt-3">
-              <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-                <div className="h-full bg-emerald-500" style={{ width: '61%' }}/>
-                <div className="h-full bg-amber-400" style={{ width: '15%' }}/>
-                <div className="h-full bg-red-500" style={{ width: '8%' }}/>
-              </div>
-              <div className="mt-2 flex items-center gap-4 text-xs text-slate-600">
-                <Legend dot="bg-emerald-500" label="In stock" value={1452}/>
-                <Legend dot="bg-amber-400" label="Low stock" value={355}/>
-                <Legend dot="bg-red-500" label="Out of stock" value={186}/>
-              </div>
-            </div>
+          <div className="bg-white rounded-xl shadow-sm p-4">
+            <div className="text-slate-600 text-sm">Average price</div>
+            <div className="text-3xl font-semibold mt-1">{avgMoney(rows.map(r=> r.sale_price || r.total_with_expenses))}</div>
           </div>
-          <div className="bg-white rounded-xl border shadow-sm p-4">
-            <div className="text-slate-600 text-sm">Average Price</div>
-            <div className="text-3xl font-semibold mt-1">$3,987</div>
-            <div className="text-xs text-slate-600 mt-1">Last 30 days</div>
+          <div className="bg-white rounded-xl shadow-sm p-4">
+            <div className="text-slate-600 text-sm">Status</div>
+            <div className="mt-2 flex items-center gap-4 text-xs text-slate-600 flex-wrap">
+              <Legend dot="bg-emerald-500" label="In stock" value={rows.filter(r=> mapVehicleStatus(r.status)==='in_stock').length}/>
+              <Legend dot="bg-amber-400" label="Low stock" value={rows.filter(r=> mapVehicleStatus(r.status)==='low_stock').length}/>
+              <Legend dot="bg-red-500" label="Out" value={rows.filter(r=> mapVehicleStatus(r.status)==='out_of_stock').length}/>
+            </div>
           </div>
         </div>
 
@@ -125,8 +90,8 @@ export default function InventoryPage(){
         </div>
 
         {/* Vehicles Table with selected headers (hide non-queried columns) */}
-        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-          <table className="min-w-full">
+        <div className="bg-white rounded-xl shadow-sm overflow-x-auto">
+          <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-left text-sm">
               <tr>
                 <Th className="w-10"></Th>
@@ -175,7 +140,7 @@ export default function InventoryPage(){
               {loading && <span className="text-slate-500">loading…</span>}
               {err && <span className="text-red-600">{err}</span>}
             </div>
-            <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1">
               <button className="px-2 py-1 rounded border bg-white">‹ Previous</button>
               <button className="px-2 py-1 rounded border bg-indigo-600 text-white">1</button>
               <button className="px-2 py-1 rounded border bg-white">2</button>
@@ -226,15 +191,6 @@ export default function InventoryPage(){
           } finally { setLoading(false); setImportOpen(false); }
         }}
       />
-    </div>
-  );
-}
-
-function NavItem({ label, open, active }){
-  return (
-    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${active ? 'bg-accent/40 text-primary' : 'hover:bg-slate-50'}`}>
-      <span className="h-2 w-2 rounded-full bg-slate-300"/>
-      {open && <span>{label}</span>}
     </div>
   );
 }
@@ -305,7 +261,11 @@ function mapStagingRow(r){
   };
 }
 
-const demoVehicleRows = [
-  { available_to:'Stand', plate:'AA-12-BB', brand:'Volkswagen', model:'Golf', version:'1.0 TSI', first_reg:'2020-05-10', first_reg_pt:'2020-06-01', days_in_stock: 45, status:'in_stock', cc:999, hp:110, km:45000, fuel:'Gasolina', expenses:350, sale_price:17900, vat_regime:'Normal', purchase_price:15000, total_with_expenses:15350 },
-  { available_to:'Stand', plate:'CC-34-DD', brand:'BMW', model:'320d', version:'Sport', first_reg:'2019-03-15', first_reg_pt:'2019-04-10', days_in_stock: 12, status:'low_stock', cc:1995, hp:190, km:68000, fuel:'Diesel', expenses:500, sale_price:25900, vat_regime:'Normal', purchase_price:23000, total_with_expenses:23500 },
-];
+
+
+function avgMoney(arr){
+  const nums = (arr||[]).map(x=> num(x)).filter(n=> n>0);
+  if (!nums.length) return '—';
+  const avg = Math.round(nums.reduce((a,b)=> a+b, 0) / nums.length);
+  return `€${avg.toLocaleString()}`;
+}

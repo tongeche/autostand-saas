@@ -80,11 +80,13 @@ export async function listCars({ q = "", limit = 50, offset = 0 } = {}){
 // List rows from the staging table with exact CSV headers
 export async function listCarsStaging({ limit = 500, offset = 0 } = {}){
   if (!supabase) throw new Error("Supabase not initialised");
-  // We select all columns; staging table uses header names with spaces/accents.
-  const { data, error, count } = await supabase
+  const tenant_id = TID();
+  let q = supabase
     .from('cars_import_staging')
     .select('*', { count: 'exact' })
     .range(offset, offset + limit - 1);
+  if (tenant_id) q = q.eq('tenant_id', tenant_id);
+  const { data, error, count } = await q;
   if (error) throw error;
   return { rows: data || [], total: count || 0 };
 }
@@ -106,8 +108,9 @@ export async function insertCarsCsvStaging(headers = [], rows = [], source = 'cs
   if (!supabase) throw new Error("Supabase not initialised");
   if (!Array.isArray(headers) || headers.length === 0) throw new Error("CSV missing headers");
   if (!Array.isArray(rows) || rows.length === 0) return { inserted: 0 };
+  const tenant_id = TID();
   const payload = rows.map(r => {
-    const obj = { source };
+    const obj = { source, tenant_id };
     headers.forEach((h, i) => { obj[h] = r[i] ?? null; });
     return obj;
   });
