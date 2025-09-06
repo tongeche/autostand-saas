@@ -3,6 +3,7 @@ import { FiChevronDown, FiChevronRight, FiEye, FiFilePlus, FiSave, FiUpload, FiS
 import { supabase } from "../../../lib/supabase";
 import { getTenantId } from "../../../lib/tenant";
 import DocumentWizard from "../components/DocumentWizard.jsx";
+import TemplateWizard from "../components/TemplateWizard.jsx";
 import { useLocation, useNavigate } from "react-router-dom";
 
 // Simple {{ key }} placeholder renderer
@@ -22,6 +23,7 @@ export default function DocumentManager(){
   const [editorOpen, setEditorOpen] = useState(false);
   const [editor, setEditor] = useState({ title: "Untitled Document", body: "", ctx: {}, type: "text" });
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [tplWizardOpen, setTplWizardOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -96,6 +98,7 @@ export default function DocumentManager(){
         <div className="flex items-center justify-center gap-4">
           {/* Emitir dropdown with submenus */}
           <EmitirMenu templates={templates} onPickTemplate={(t)=>{ setSelectedTpl(t); setEditor({ title: t?.name||'Document', body: t?.body||'', ctx:{}, type:'text' }); setEditorOpen(true); }} onNewBlank={()=> setWizardOpen(true)} />
+          <button className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-xl shadow" onClick={()=> setTplWizardOpen(true)}> <FiFilePlus className="inline mr-2"/> Create Templates</button>
           <button className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-xl shadow" onClick={()=> alert('Rules coming soon')}> <FiSettings className="inline mr-2"/> Manage Rules</button>
           <button className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-xl shadow" onClick={()=> alert('Upload coming soon')}> <FiUpload className="inline mr-2"/> Upload</button>
         </div>
@@ -126,6 +129,12 @@ export default function DocumentManager(){
         setEditor({ title, body, ctx, type });
         setEditorOpen(true);
         setWizardOpen(false);
+      }} />
+
+      {/* Create Templates Wizard */}
+      <TemplateWizard open={tplWizardOpen} onClose={()=> setTplWizardOpen(false)} onCreated={(t)=>{
+        setTemplates(prev => [t, ...(prev||[])]);
+        setSelectedTpl(t);
       }} />
 
       {/* Share modal */}
