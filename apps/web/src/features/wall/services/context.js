@@ -77,35 +77,37 @@ export async function assembleDocContext({ leadId, orgId = getTenantId(), userId
         };
       } else {
         // Fallback to staging (exact-header Portuguese columns)
-        const { data: s } = await supabase
+        const cols = [
+          'Matrícula',
+          'Marca',
+          'Modelo',
+          'Versão',
+          'KM',
+          'Combustível',
+          'Preço de Venda',
+          'Cor',
+          'Data da primeira matrícula'
+        ];
+        const selectExpr = cols.map((c) => `"${c}"`).join(',');
+        const { data: stg } = await supabase
           .from('cars_import_staging')
-          .select('
-            "Matrícula",
-            "Marca",
-            "Modelo",
-            "Versão",
-            "KM",
-            "Combustível",
-            "Preço de Venda",
-            "Cor",
-            "Data da primeira matrícula"
-          ')
+          .select(selectExpr)
           .eq('org_id', orgId)
           .eq('Matrícula', plate)
           .maybeSingle();
-        if (s){
+        if (stg){
           // Try to parse year from first registration date
           let year = '';
-          const firstReg = s['Data da primeira matrícula'] || '';
+          const firstReg = stg['Data da primeira matrícula'] || '';
           try { year = new Date(firstReg).getFullYear() || ''; } catch {}
           ctx.car = {
-            brand: s['Marca'] || '', make: s['Marca'] || '', model: s['Modelo'] || '', version: s['Versão'] || '',
+            brand: stg['Marca'] || '', make: stg['Marca'] || '', model: stg['Modelo'] || '', version: stg['Versão'] || '',
             year,
-            mileage: s['KM'] || '',
-            fuel: s['Combustível'] || '',
-            color: s['Cor'] || '',
-            price: s['Preço de Venda'] || '',
-            extras: s['Versão'] || '',
+            mileage: stg['KM'] || '',
+            fuel: stg['Combustível'] || '',
+            color: stg['Cor'] || '',
+            price: stg['Preço de Venda'] || '',
+            extras: stg['Versão'] || '',
             plate
           };
         }
