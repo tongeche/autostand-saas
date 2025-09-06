@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { FiChevronDown, FiChevronRight, FiEye, FiFilePlus, FiSave, FiUpload, FiSettings, FiShare2, FiTrash2 } from "react-icons/fi";
+import { FiChevronDown, FiChevronRight, FiEye, FiFilePlus, FiSave, FiUpload, FiSettings, FiShare2, FiTrash2, FiGrid } from "react-icons/fi";
 import { supabase } from "../../../lib/supabase";
 import { getTenantId } from "../../../lib/tenant";
 import DocumentWizard from "../components/DocumentWizard.jsx";
@@ -24,6 +24,7 @@ export default function DocumentManager(){
   const [editor, setEditor] = useState({ title: "Untitled Document", body: "", ctx: {}, type: "text" });
   const [wizardOpen, setWizardOpen] = useState(false);
   const [tplWizardOpen, setTplWizardOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -95,12 +96,18 @@ export default function DocumentManager(){
 
       {/* Action Center (Emitir / Manage Rules / Upload) */}
       <div className="bg-white p-6 rounded-xl shadow-md">
-        <div className="flex items-center justify-center gap-4">
-          {/* Emitir dropdown with submenus */}
-          <EmitirMenu templates={templates} onPickTemplate={(t)=>{ setSelectedTpl(t); setEditor({ title: t?.name||'Document', body: t?.body||'', ctx:{}, type:'text' }); setEditorOpen(true); }} onNewBlank={()=> setWizardOpen(true)} />
-          <button className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-xl shadow" onClick={()=> setTplWizardOpen(true)}> <FiFilePlus className="inline mr-2"/> Create Templates</button>
-          <button className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-xl shadow" onClick={()=> alert('Rules coming soon')}> <FiSettings className="inline mr-2"/> Manage Rules</button>
-          <button className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-xl shadow" onClick={()=> alert('Upload coming soon')}> <FiUpload className="inline mr-2"/> Upload</button>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          {/* Insert from Template */}
+          <EmitirMenu
+            label="Insert from Template"
+            templates={templates}
+            onPickTemplate={(t)=>{ setSelectedTpl(t); setEditor({ title: t?.name||'Document', body: t?.body||'', ctx:{}, type:'text' }); setEditorOpen(true); }}
+            onNewBlank={()=> setWizardOpen(true)}
+          />
+          {/* View All */}
+          <button className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-xl shadow inline-flex items-center gap-2" onClick={()=> setGalleryOpen(true)}> <FiGrid/> View All</button>
+          {/* Create New (Templates) */}
+          <button className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-xl shadow inline-flex items-center gap-2" onClick={()=> setTplWizardOpen(true)}> <FiFilePlus/> Create New</button>
         </div>
       </div>
 
@@ -136,6 +143,14 @@ export default function DocumentManager(){
         setTemplates(prev => [t, ...(prev||[])]);
         setSelectedTpl(t);
       }} />
+
+      {/* View All default documents */}
+      <DocumentGalleryModal
+        open={galleryOpen}
+        onClose={()=> setGalleryOpen(false)}
+        onPreview={(doc)=> openPreview({ title: doc.title, body: doc.body, ctx: doc.ctx })}
+        onInsert={(doc)=> { setEditor({ title: doc.title, body: doc.body, ctx: doc.ctx, type:'text' }); setEditorOpen(true); setGalleryOpen(false); }}
+      />
 
       {/* Share modal */}
       {shareOpen && (
@@ -324,14 +339,67 @@ function DeleteConfirmModal({ onCancel, onConfirm }){
   );
 }
 
+// Gallery modal showing some pre-created default PDF documents (generated from sample templates)
+function DocumentGalleryModal({ open, onClose, onPreview, onInsert }){
+  const docs = useMemo(()=> DEFAULT_DOCS, []);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[92] bg-black/30 flex items-start justify-center p-4">
+      <div className="w-full max-w-3xl bg-white rounded-2xl shadow-lg overflow-hidden">
+        <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom:'1px solid #e5e7eb' }}>
+          <div className="font-medium">All Documents</div>
+          <button className="p-2 rounded border" onClick={onClose}>×</button>
+        </div>
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          {docs.map(d => (
+            <div key={d.id} className="rounded-xl p-3 bg-white shadow flex flex-col">
+              <div className="font-medium truncate">{d.title}</div>
+              <div className="text-xs text-slate-600 mt-1 line-clamp-2">{d.preview}</div>
+              <div className="mt-3 inline-flex items-center gap-2">
+                <button className="px-3 py-1.5 rounded-xl text-white text-xs font-medium" style={{ background:'#3C6B5B' }} onClick={()=> onPreview?.(d)}>Preview</button>
+                <button className="px-3 py-1.5 rounded-xl bg-gray-200 text-gray-800 text-xs font-medium" onClick={()=> onInsert?.(d)}>Insert</button>
+              </div>
+            </div>
+          ))}
+          {docs.length===0 && <div className="text-sm text-slate-600">No documents yet.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const DEFAULT_DOCS = [
+  {
+    id: 'doc-proposal',
+    title: 'Vehicle Proposal (Sample)',
+    preview: 'Olá {{client.name}}, Segue a proposta para {{car.make}} {{car.model}} ({{car.plate}})…',
+    body: 'Olá {{client.name}},\n\nSegue a proposta para {{car.make}} {{car.model}} ({{car.plate}}).\nPreço: {{car.price}} €.',
+    ctx: { client:{ name:'Cliente' }, car:{ plate:'AA-00-AA', make:'Volkswagen', model:'Golf', price:'17 900' }, dealer:{ name:'Autotrust' } }
+  },
+  {
+    id: 'doc-followup',
+    title: 'Follow‑up (Sample)',
+    preview: 'Hello {{client.name}}, following up about the {{car.make}} {{car.model}}…',
+    body: 'Hello {{client.name}},\n\nFollowing up about the {{car.make}} {{car.model}}. Let me know if you want a test drive.\n\nBest,\n{{dealer.name}}',
+    ctx: { client:{ name:'Client' }, car:{ plate:'', make:'Renault', model:'Clio', price:'' }, dealer:{ name:'Autotrust' } }
+  },
+  {
+    id: 'doc-checklist',
+    title: 'Vehicle Checklist (Sample)',
+    preview: 'Checklist de estado e preparação da viatura…',
+    body: 'Checklist de estado e preparação da viatura.\n\n— Itens a verificar —\n• Lavagem e detalhe\n• Pneus verificados\n• Revisão\n• Inspeção de segurança',
+    ctx: { client:{ name:'Cliente' }, car:{ plate:'00-AA-00', make:'BMW', model:'520d', price:'' }, dealer:{ name:'Autotrust' } }
+  }
+];
+
 // Emitir menu with submenus (adapts the template UX). Pure client-side.
-function EmitirMenu({ templates, onPickTemplate, onNewBlank }){
+function EmitirMenu({ label='Emitir', templates, onPickTemplate, onNewBlank }){
   const [open, setOpen] = useState(false);
   const [submenu, setSubmenu] = useState(null); // 'templates' | 'create' | null
   return (
     <div className="relative inline-block text-left">
-      <button onClick={()=>{ setOpen(v=>!v); setSubmenu(null); }} className="text-white font-bold py-3 px-6 rounded-xl shadow-lg" style={{ background:'#3C6B5B' }}>
-        Emitir <span className="ml-2">▼</span>
+      <button onClick={()=>{ setOpen(v=>!v); setSubmenu(null); }} className="text-white font-bold py-3 px-6 rounded-xl shadow-lg inline-flex items-center gap-2" style={{ background:'#3C6B5B' }}>
+        {label} <span className="ml-1">▼</span>
       </button>
       {open && (
         <div className="absolute mt-2 w-56 bg-white rounded-xl shadow-lg p-2 z-10">
