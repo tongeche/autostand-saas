@@ -6,6 +6,8 @@ import {
 import AddLeadWizard from "../features/leads/components/AddLeadWizard.jsx";
 import QuickTaskModal from "../features/todos/components/QuickTaskModal.jsx";
 import FindAssetModal from "../features/inventory/components/FindAssetModal.jsx";
+import { supabase } from "../lib/supabase";
+import { useSupabaseSession } from "../lib/auth";
 
 /** CONFIG */
 const DEBUG = false; // flip to true to see mode/open badges in the topbar
@@ -47,6 +49,28 @@ export default function Layout() {
   const [quickTaskOpen, setQuickTaskOpen] = useState(false);
   const [quickDefaults, setQuickDefaults] = useState({ title: "", due: null });
   const [findAssetOpen, setFindAssetOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const session = useSupabaseSession();
+  // If logged in but has no memberships, redirect to onboard (client-side check)
+  useEffect(()=>{
+    (async ()=>{
+      if (!session) return;
+      try{
+        const { data: userData } = await supabase.auth.getUser();
+        const uid = userData?.user?.id; if (!uid) return;
+        const { data: ms } = await supabase
+          .from('org_members')
+          .select('org_id')
+          .eq('user_id', uid)
+          .limit(1);
+        if (!ms || ms.length === 0){
+          // avoid redirect loop if already on onboard/login/signup
+          const path = window.location.pathname;
+          if (!/\/onboard|\/login|\/signup/.test(path)) navigate('/onboard');
+        }
+      }catch{}
+    })();
+  }, [session, navigate]);
 
   // When switching to desktop, close mobile drawer but do NOT change sidebar open state
   useEffect(() => {
@@ -168,6 +192,23 @@ export default function Layout() {
                   </div>
                 )}
               </div>
+              {!session ? (
+                <>
+                  <button className="px-3 py-1.5 rounded-lg border bg-white text-sm" onClick={()=> navigate('/login')}>Sign in</button>
+                  <button className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-sm" onClick={()=> navigate('/signup')}>Sign up</button>
+                </>
+              ) : (
+                <div className="relative">
+                  <button className="px-3 py-1.5 rounded-lg border bg-white text-sm" onClick={()=> setUserMenuOpen(v=>!v)}>
+                    {session?.user?.email?.split('@')[0] || 'Account'}
+                  </button>
+                  {userMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-lg border z-50">
+                      <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={async ()=>{ setUserMenuOpen(false); await supabase.auth.signOut(); navigate('/login'); }}>Logout</button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </header>
