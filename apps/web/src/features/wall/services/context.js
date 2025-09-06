@@ -50,7 +50,7 @@ export async function assembleDocContext({ leadId, orgId = getTenantId(), userId
     }
   }catch{}
 
-  // Car (match by plate in cars table if available)
+  // Car (match by plate in cars table; fallback to cars_import_staging)
   try{
     const plate = lead?.plate || null;
     if (plate && orgId){
@@ -62,10 +62,45 @@ export async function assembleDocContext({ leadId, orgId = getTenantId(), userId
         .maybeSingle();
       if (car){
         ctx.car = {
-          id: car.id, brand: car.make || '', model: car.model || '', version: car.version || '',
+          id: car.id,
+          brand: car.make || '', make: car.make || '', model: car.model || '', version: car.version || '',
           year: car.year || '', mileage: car.mileage || '', fuel: car.fuel || '', color: car.color || '',
-          price: car.price || '', extras: car.source || ''
+          price: car.price || '', extras: car.source || '', plate
         };
+      } else {
+        // Fallback to staging (exact-header Portuguese columns)
+        const { data: s } = await supabase
+          .from('cars_import_staging')
+          .select('
+            "Matrícula",
+            "Marca",
+            "Modelo",
+            "Versão",
+            "KM",
+            "Combustível",
+            "Preço de Venda",
+            "Cor",
+            "Data da primeira matrícula"
+          ')
+          .eq('org_id', orgId)
+          .eq('Matrícula', plate)
+          .maybeSingle();
+        if (s){
+          // Try to parse year from first registration date
+          let year = '';
+          const firstReg = s['Data da primeira matrícula'] || '';
+          try { year = new Date(firstReg).getFullYear() || ''; } catch {}
+          ctx.car = {
+            brand: s['Marca'] || '', make: s['Marca'] || '', model: s['Modelo'] || '', version: s['Versão'] || '',
+            year,
+            mileage: s['KM'] || '',
+            fuel: s['Combustível'] || '',
+            color: s['Cor'] || '',
+            price: s['Preço de Venda'] || '',
+            extras: s['Versão'] || '',
+            plate
+          };
+        }
       }
     }
   }catch{}
@@ -85,4 +120,3 @@ export async function assembleDocContext({ leadId, orgId = getTenantId(), userId
 
   return ctx;
 }
-
