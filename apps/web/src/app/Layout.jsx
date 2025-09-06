@@ -52,6 +52,7 @@ export default function Layout() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const session = useSupabaseSession();
   const [orgName, setOrgName] = useState("");
+  const [profile, setProfile] = useState({ avatar_url: "", full_name: "", email: "" });
   // If logged in but has no memberships, redirect to onboard (client-side check)
   useEffect(()=>{
     (async ()=>{
@@ -82,6 +83,17 @@ export default function Layout() {
         if (!session) { setOrgName(""); return; }
         const { data: userData } = await supabase.auth.getUser();
         const uid = userData?.user?.id; if (!uid) { setOrgName(""); return; }
+        // Load profile for avatar/name
+        try {
+          const email = userData?.user?.email || "";
+          const metaAvatar = userData?.user?.user_metadata?.avatar_url || "";
+          const { data: p } = await supabase
+            .from('profiles')
+            .select('full_name, avatar_url')
+            .eq('user_id', uid)
+            .maybeSingle();
+          setProfile({ avatar_url: p?.avatar_url || metaAvatar || "", full_name: p?.full_name || "", email });
+        } catch {}
         const { data: ms } = await supabase
           .from('org_members')
           .select('org_id, orgs(name)')
@@ -228,12 +240,21 @@ export default function Layout() {
                   <button className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-sm" onClick={()=> navigate('/signup')}>Sign up</button>
                 </>
               ) : (
-                <div className="relative">
-                  <button className="px-3 py-1.5 rounded-lg border bg-white text-sm" onClick={()=> setUserMenuOpen(v=>!v)}>
-                    {session?.user?.email?.split('@')[0] || 'Account'}
+              <div className="relative">
+                  <button className="h-9 w-9 rounded-full border bg-white overflow-hidden" title={profile.email} onClick={()=> setUserMenuOpen(v=>!v)}>
+                    {profile?.avatar_url ? (
+                      <img src={profile.avatar_url} alt="avatar" className="h-full w-full object-cover"/>
+                    ) : (
+                      <span className="h-full w-full grid place-items-center text-sm font-medium text-slate-700">
+                        {(profile.email || 'A').slice(0,1).toUpperCase()}
+                      </span>
+                    )}
                   </button>
                   {userMenuOpen && (
                     <div className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-lg border z-50">
+                      <div className="px-3 py-2 text-xs text-slate-600 truncate">{profile.email}</div>
+                      <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={()=>{ setUserMenuOpen(false); navigate('/settings'); }}>Settings</button>
+                      <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={()=>{ setUserMenuOpen(false); navigate('/settings'); }}>Manage account</button>
                       <button className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50" onClick={async ()=>{ setUserMenuOpen(false); try{ window.localStorage.removeItem('org_id'); }catch{} await supabase.auth.signOut(); navigate('/login'); }}>Logout</button>
                     </div>
                   )}

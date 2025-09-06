@@ -17,8 +17,8 @@ export default function LandingPage(){
           <a href="#contact" className="hover:text-primary">Contact</a>
           </div>
           <div className="inline-flex items-center gap-2">
-            <Link to="/login" className="hidden md:inline px-3 py-2 rounded-lg border bg-white text-base">Log In</Link>
-            <Link to="/signup" className="hidden md:inline px-3 py-2 rounded-lg border bg-white text-base">Sign Up</Link>
+            <Link to="/login" className="hidden md:inline px-3 py-2 rounded-lg bg-white text-base">Log In</Link>
+            <Link to="/signup" className="hidden md:inline px-3 py-2 rounded-lg  bg-white text-base">Sign Up</Link>
             <Link to="/signup" className="px-3 py-2 rounded-full bg-[#205e4b] text-white text-base shadow">Book a demo</Link>
           </div>
         </nav>
@@ -41,9 +41,9 @@ export default function LandingPage(){
       <section className="px-4 md:px-6 pb-16">
         <div className="max-w-6xl mx-auto rounded-3xl shadow-lg bg-white/80 backdrop-blur p-2 md:p-3">
           <img
-            src="/landing-screenshot.svg"
+            src="/landing-screenshot.png"
             alt="Leads+ app preview"
-            className="w-full h-auto rounded-2xl border object-cover"
+            className="w-full h-auto rounded-2xl object-cover"
           />
         </div>
       </section>
