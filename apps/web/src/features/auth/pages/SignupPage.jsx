@@ -16,6 +16,9 @@ export default function SignupPage(){
     e?.preventDefault();
     try{
       setBusy(true); setMsg("");
+      if (!supabase) {
+        throw new Error("Supabase not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in environment.");
+      }
       const { error } = await supabase.auth.signUp({ email, password });
       if (error) throw error;
       setMsg("Check your email to confirm your account.");
