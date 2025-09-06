@@ -3,7 +3,7 @@ import { supabase } from "../../../lib/supabase";
 
 export default function SettingsPage(){
   const [orgId, setOrgId] = useState(null);
-  const [brand, setBrand] = useState({ brand_name: "", brand_logo_url: "", theme_mode: "system", timezone: "", date_format: "" });
+  const [brand, setBrand] = useState({ brand_name: "", brand_logo_url: "", theme_mode: "system", timezone: "", date_format: "", business_type: 'cars' });
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
@@ -24,7 +24,7 @@ export default function SettingsPage(){
         const id = ms[0].org_id; setOrgId(id);
         const { data: s } = await supabase
           .from('org_settings')
-          .select('brand_name, brand_logo_url, theme_mode, timezone, date_format')
+          .select('brand_name, brand_logo_url, theme_mode, timezone, date_format, business_type')
           .eq('org_id', id)
           .maybeSingle();
         if (s) setBrand({
@@ -32,7 +32,8 @@ export default function SettingsPage(){
           brand_logo_url: s.brand_logo_url || '',
           theme_mode: s.theme_mode || 'system',
           timezone: s.timezone || '',
-          date_format: s.date_format || ''
+          date_format: s.date_format || '',
+          business_type: s.business_type || 'cars'
         });
       }catch(e){ setMsg(e.message || String(e)); }
     })();
@@ -47,7 +48,8 @@ export default function SettingsPage(){
         brand_logo_url: brand.brand_logo_url || null,
         theme_mode: brand.theme_mode || null,
         timezone: brand.timezone || null,
-        date_format: brand.date_format || null
+        date_format: brand.date_format || null,
+        business_type: brand.business_type || null
       };
       const { error } = await supabase.from('org_settings').upsert(payload, { onConflict: 'org_id' });
       if (error) throw error;
@@ -93,6 +95,13 @@ export default function SettingsPage(){
           )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <label className="text-sm block">
+            <div className="text-slate-600 mb-1">Business type</div>
+            <select className="w-full rounded-lg border px-3 py-2 text-sm" value={brand.business_type} onChange={(e)=> setBrand(b=>({...b, business_type:e.target.value}))}>
+              <option value="cars">Cars (vehicle inventory)</option>
+              <option value="general">Other (generic inventory)</option>
+            </select>
+          </label>
           <label className="text-sm block">
             <div className="text-slate-600 mb-1">Theme</div>
             <select className="w-full rounded-lg border px-3 py-2 text-sm" value={brand.theme_mode} onChange={(e)=> setBrand(b=>({...b, theme_mode:e.target.value}))}>

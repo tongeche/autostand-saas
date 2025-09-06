@@ -9,7 +9,7 @@ export default function OnboardWizard(){
   const [err, setErr] = useState("");
   const [orgId, setOrgId] = useState(null);
   const [name, setName] = useState("");
-  const [brand, setBrand] = useState({ brand_name: "", brand_logo_url: "" });
+  const [brand, setBrand] = useState({ brand_name: "", brand_logo_url: "", business_type: 'cars' });
   const [inv1, setInv1] = useState("");
   const [inv2, setInv2] = useState("");
 
@@ -87,6 +87,13 @@ export default function OnboardWizard(){
             <div className="text-slate-600 mb-1">Logo URL</div>
             <input className="w-full rounded-lg border px-3 py-2 text-sm" value={brand.brand_logo_url} onChange={(e)=> setBrand(b=>({...b, brand_logo_url:e.target.value}))} placeholder="https://…"/>
           </label>
+          <label className="text-sm block">
+            <div className="text-slate-600 mb-1">Business type</div>
+            <select className="w-full rounded-lg border px-3 py-2 text-sm" value={brand.business_type} onChange={(e)=> setBrand(b=>({...b, business_type:e.target.value}))}>
+              <option value="cars">Cars (vehicle inventory)</option>
+              <option value="general">Other (generic inventory)</option>
+            </select>
+          </label>
           <div className="flex items-center justify-between">
             <button className="px-3 py-2 rounded-lg border text-sm" onClick={()=> setStep(3)}>Skip</button>
             <button className="px-3 py-2 rounded-lg bg-gray-900 text-white text-sm" onClick={saveBrand} disabled={busy}>Continue</button>
@@ -116,4 +123,3 @@ export default function OnboardWizard(){
     </div>
   );
 }
-

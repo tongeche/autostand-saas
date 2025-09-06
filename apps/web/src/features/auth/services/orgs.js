@@ -25,8 +25,12 @@ export async function createOrg(name){
   return { id: data };
 }
 
-export async function upsertOrgSettings(orgId, { brand_name=null, brand_logo_url=null } = {}){
+export async function upsertOrgSettings(orgId, { brand_name=null, brand_logo_url=null, business_type=null, theme_mode=null, timezone=null, date_format=null } = {}){
   const payload = { org_id: orgId, brand_name, brand_logo_url };
+  if (business_type) payload.business_type = business_type;
+  if (theme_mode) payload.theme_mode = theme_mode;
+  if (timezone) payload.timezone = timezone;
+  if (date_format) payload.date_format = date_format;
   const { data, error } = await supabase
     .from('org_settings')
     .upsert(payload, { onConflict: 'org_id' })
@@ -34,6 +38,16 @@ export async function upsertOrgSettings(orgId, { brand_name=null, brand_logo_url
     .single();
   if (error) throw error;
   return data;
+}
+
+export async function getOrgSettings(orgId){
+  const { data, error } = await supabase
+    .from('org_settings')
+    .select('brand_name, brand_logo_url, business_type, theme_mode, timezone, date_format')
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
 }
 
 export async function recordInvite(orgId, email, role='member'){

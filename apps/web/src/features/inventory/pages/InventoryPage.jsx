@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { FiSearch, FiUpload, FiDownload, FiMoreHorizontal } from "react-icons/fi";
 import InventoryCsvImportModal from "../components/InventoryCsvImportModal.jsx";
 import { insertCarsCsvStaging, listCarsStaging } from "../services/cars";
+import { listGeneralItems } from "../services/general";
+import { supabase } from "../../../lib/supabase";
 
 export default function InventoryPage(){
   const location = useLocation();
@@ -10,15 +12,33 @@ export default function InventoryPage(){
   const [q, setQ] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [rows, setRows] = useState([]);
+  const [biz, setBiz] = useState('cars');
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
 
   async function loadFromDb(){
     try { setLoading(true); setErr(null);
-      // Load from staging table and map to normalized fields used in UI
-      const { rows: raw } = await listCarsStaging({});
-      const mapped = raw.map(mapStagingRow);
-      setRows(mapped);
+      // Load business type for current org
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData?.user?.id;
+      let bt = 'cars';
+      if (uid){
+        const { data: ms } = await supabase.from('org_members').select('org_id').eq('user_id', uid).limit(1);
+        const orgId = ms && ms[0]?.org_id;
+        if (orgId){
+          const { data: s } = await supabase.from('org_settings').select('business_type').eq('org_id', orgId).maybeSingle();
+          bt = s?.business_type || 'cars';
+        }
+      }
+      setBiz(bt);
+      if (bt === 'cars'){
+        const { rows: raw } = await listCarsStaging({});
+        const mapped = raw.map(mapStagingRow);
+        setRows(mapped);
+      } else {
+        const { rows: items } = await listGeneralItems({ q });
+        setRows(items);
+      }
     } catch(e){ setErr(e.message || String(e)); }
     finally { setLoading(false); }
   }
@@ -95,40 +115,68 @@ export default function InventoryPage(){
             <thead className="bg-slate-50 text-left text-sm">
               <tr>
                 <Th className="w-10"></Th>
-                <Th>Disponibilizado a</Th>
-                <Th>Matrícula</Th>
-                <Th>Marca</Th>
-                <Th>Modelo</Th>
-                <Th>Versão</Th>
-                <Th className="text-right">Dias em Stock</Th>
-                <Th>Estado</Th>
-                <Th className="text-right">Cilindrada</Th>
-                <Th className="text-right">Potência</Th>
-                <Th className="text-right">KM</Th>
-                <Th>Combustível</Th>
-                <Th className="text-right">Despesas</Th>
-                <Th className="text-right">Total com Despesas</Th>
-                <Th className="w-10 text-right">Ação</Th>
+                {biz === 'cars' ? (
+                  <>
+                    <Th>Disponibilizado a</Th>
+                    <Th>Matrícula</Th>
+                    <Th>Marca</Th>
+                    <Th>Modelo</Th>
+                    <Th>Versão</Th>
+                    <Th className="text-right">Dias em Stock</Th>
+                    <Th>Estado</Th>
+                    <Th className="text-right">Cilindrada</Th>
+                    <Th className="text-right">Potência</Th>
+                    <Th className="text-right">KM</Th>
+                    <Th>Combustível</Th>
+                    <Th className="text-right">Despesas</Th>
+                    <Th className="text-right">Total com Despesas</Th>
+                    <Th className="w-10 text-right">Ação</Th>
+                  </>
+                ) : (
+                  <>
+                    <Th>Item</Th>
+                    <Th>SKU</Th>
+                    <Th className="text-right">Qty</Th>
+                    <Th className="text-right">Price</Th>
+                    <Th>Status</Th>
+                    <Th>Category</Th>
+                    <Th className="w-10 text-right">Ação</Th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
               {filtered.map((r, idx)=> (
                 <tr key={idx} className="border-t">
                   <td className="px-3 py-3"><input type="checkbox"/></td>
-                  <td className="px-3 py-3 text-sm">{r.available_to || '—'}</td>
-                  <td className="px-3 py-3 text-sm">{r.plate || '—'}</td>
-                  <td className="px-3 py-3 text-sm">{r.brand || '—'}</td>
-                  <td className="px-3 py-3 text-sm">{r.model || '—'}</td>
-                  <td className="px-3 py-3 text-sm">{r.version || '—'}</td>
-                  <td className="px-3 py-3 text-right text-sm">{num(r.days_in_stock)}</td>
-                  <td className="px-3 py-3">{statusPill(mapVehicleStatus(r.status))}</td>
-                  <td className="px-3 py-3 text-right text-sm">{num(r.cc)}</td>
-                  <td className="px-3 py-3 text-right text-sm">{num(r.hp)}</td>
-                  <td className="px-3 py-3 text-right text-sm">{num(r.km)}</td>
-                  <td className="px-3 py-3 text-sm">{r.fuel || '—'}</td>
-                  <td className="px-3 py-3 text-right text-sm">{money(r.expenses)}</td>
-                  <td className="px-3 py-3 text-right text-sm">{money(r.total_with_expenses)}</td>
-                  <td className="px-3 py-3 text-right"><button className="icon-btn"><FiMoreHorizontal/></button></td>
+                  {biz === 'cars' ? (
+                    <>
+                      <td className="px-3 py-3 text-sm">{r.available_to || '—'}</td>
+                      <td className="px-3 py-3 text-sm">{r.plate || '—'}</td>
+                      <td className="px-3 py-3 text-sm">{r.brand || '—'}</td>
+                      <td className="px-3 py-3 text-sm">{r.model || '—'}</td>
+                      <td className="px-3 py-3 text-sm">{r.version || '—'}</td>
+                      <td className="px-3 py-3 text-right text-sm">{num(r.days_in_stock)}</td>
+                      <td className="px-3 py-3">{statusPill(mapVehicleStatus(r.status))}</td>
+                      <td className="px-3 py-3 text-right text-sm">{num(r.cc)}</td>
+                      <td className="px-3 py-3 text-right text-sm">{num(r.hp)}</td>
+                      <td className="px-3 py-3 text-right text-sm">{num(r.km)}</td>
+                      <td className="px-3 py-3 text-sm">{r.fuel || '—'}</td>
+                      <td className="px-3 py-3 text-right text-sm">{money(r.expenses)}</td>
+                      <td className="px-3 py-3 text-right text-sm">{money(r.total_with_expenses)}</td>
+                      <td className="px-3 py-3 text-right"><button className="icon-btn"><FiMoreHorizontal/></button></td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-3 py-3 text-sm">{r.name || '—'}</td>
+                      <td className="px-3 py-3 text-sm">{r.sku || '—'}</td>
+                      <td className="px-3 py-3 text-right text-sm">{num(r.quantity)}</td>
+                      <td className="px-3 py-3 text-right text-sm">{money(r.price)}</td>
+                      <td className="px-3 py-3 text-sm">{r.status || '—'}</td>
+                      <td className="px-3 py-3 text-sm">{r.category || '—'}</td>
+                      <td className="px-3 py-3 text-right"><button className="icon-btn"><FiMoreHorizontal/></button></td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>
