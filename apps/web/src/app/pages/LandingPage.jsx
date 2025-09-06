@@ -37,49 +37,14 @@ export default function LandingPage(){
         </div>
       </section>
 
-      {/* Preview panel */}
+      {/* Preview panel — replace with a large screenshot image */}
       <section className="px-4 md:px-6 pb-16">
-        <div className="max-w-6xl mx-auto rounded-3xl shadow-lg bg-white/80 backdrop-blur border p-4 md:p-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            {/* mini sidebar mock */}
-            <aside className="md:col-span-1 bg-[#ecf5ef] rounded-2xl p-3">
-              <div className="text-sm font-semibold mb-2">Leads+</div>
-              <ul className="space-y-2 text-sm">
-                <li className="rounded-lg bg-white px-3 py-2">Dashboard</li>
-                <li className="rounded-lg px-3 py-2">Leads</li>
-                <li className="rounded-lg px-3 py-2">Tasks</li>
-                <li className="rounded-lg px-3 py-2">Inventory</li>
-                <li className="rounded-lg px-3 py-2">Documents</li>
-              </ul>
-            </aside>
-            {/* main cards mock */}
-            <div className="md:col-span-4 space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <MetricCard title="New Leads" value="34" note="This week"/>
-                <MetricCard title="Responses" value="65%" note="Rate"/>
-                <MetricCard title="Tasks due" value="18" note="Today"/>
-                <MetricCard title="Docs sent" value="7" note="This month"/>
-              </div>
-              <div className="grid md:grid-cols-2 gap-3">
-                <div className="rounded-2xl border p-3">
-                  <div className="text-sm font-medium mb-2">Recent Leads</div>
-                  <ul className="text-sm space-y-2 text-slate-700">
-                    <li className="flex items-center justify-between"><span>João Silva</span><span className="text-slate-500">2h ago</span></li>
-                    <li className="flex items-center justify-between"><span>Ana Costa</span><span className="text-slate-500">5h ago</span></li>
-                    <li className="flex items-center justify-between"><span>Diogo Lopes</span><span className="text-slate-500">Yesterday</span></li>
-                  </ul>
-                </div>
-                <div className="rounded-2xl border p-3">
-                  <div className="text-sm font-medium mb-2">Upcoming Tasks</div>
-                  <ul className="text-sm space-y-2 text-slate-700">
-                    <li className="flex items-center justify-between"><span>Send proposal</span><span className="text-slate-500">10:00</span></li>
-                    <li className="flex items-center justify-between"><span>Call Ana</span><span className="text-slate-500">14:30</span></li>
-                    <li className="flex items-center justify-between"><span>Upload photos</span><span className="text-slate-500">Tomorrow</span></li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="max-w-6xl mx-auto rounded-3xl shadow-lg bg-white/80 backdrop-blur border p-2 md:p-3">
+          <img
+            src="/landing-screenshot.svg"
+            alt="Leads+ app preview"
+            className="w-full h-auto rounded-2xl border object-cover"
+          />
         </div>
       </section>
     </div>
