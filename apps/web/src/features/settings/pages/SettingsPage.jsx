@@ -130,6 +130,31 @@ export default function SettingsPage(){
       setPushBusy(false);
     }
   }
+async function sendTestPush(){
+  try{
+    setPushMsg("Sending…");
+    const { data: u } = await supabase.auth.getUser();
+    const userId = u?.user?.id;
+    if (!userId || !orgId) throw new Error("Missing user/org");
+
+    const res = await fetch("/.netlify/functions/push-send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: userId,
+        org_id: orgId,
+        payload: { title: "Test push", body: "Hello from Settings", data: { url: "/tasks" } }
+      })
+    });
+
+    const json = await res.json().catch(() => ({}));
+    setPushMsg(`Response: ${res.status} ${JSON.stringify(json)}`);
+  } catch(e){
+    setPushMsg(`❌ ${e?.message || String(e)}`);
+  }
+}
+
+
 
   // helpers (self-contained; no impact on existing code)
   function base64UrlToUint8Array(b64){
@@ -213,6 +238,15 @@ export default function SettingsPage(){
           </div>
         </div>
         {/* --- end push section --- */}
+
+        <button
+  onClick={sendTestPush}
+  className="px-3 py-2 rounded-lg border text-sm hover:bg-slate-50 disabled:opacity-50"
+  disabled={pushBusy || !orgId}
+>
+  Send test notification
+</button>
+
 
       </div>
     </div>
