@@ -5,7 +5,11 @@
     "moduleResolution": "Bundler",
     "outDir": "dist",
     "rootDir": "src",
-    "strict": true
+    "strict": true,
+
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "types": ["node"]
   },
   "include": ["src"]
 }

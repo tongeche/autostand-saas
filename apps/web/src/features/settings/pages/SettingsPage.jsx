@@ -1,12 +1,18 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+
 export default function SettingsPage(){
   const [orgId, setOrgId] = useState(null);
   const [brand, setBrand] = useState({ brand_name: "", brand_logo_url: "", theme_mode: "system", timezone: "", date_format: "", business_type: 'cars' });
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
+
+  // Push-related UI (kept separate to avoid touching your existing msg/busy)
+  const [pushMsg, setPushMsg] = useState("");
+  const [pushBusy, setPushBusy] = useState(false);
 
   useEffect(()=>{
     (async ()=>{
@@ -74,6 +80,73 @@ export default function SettingsPage(){
     finally{ setUploadBusy(false); }
   }
 
+  // --- Push enable (non-invasive; uses its own state) ---
+  async function enablePushOnThisDevice(){
+    try{
+      setPushBusy(true);
+      setPushMsg("");
+
+      // 0) sanity checks
+      if (!orgId) throw new Error("No org selected");
+      const { data: userWrap, error: userErr } = await supabase.auth.getUser();
+      if (userErr) throw userErr;
+      const userId = userWrap?.user?.id;
+      if (!userId) throw new Error("No active user session");
+      if (!VAPID_PUBLIC_KEY) throw new Error("Missing VITE_VAPID_PUBLIC_KEY");
+
+      // 1) browser capabilities
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+        throw new Error("Push not supported on this browser/device");
+      }
+
+      // 2) ask permission (must be triggered by a user gesture)
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") throw new Error("Notification permission denied");
+
+      // 3) register service worker (expects /public/sw.js in your app)
+      const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+
+      // 4) subscribe with VAPID public key
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: base64UrlToUint8Array(VAPID_PUBLIC_KEY)
+      });
+
+      // 5) persist to Supabase (user+org scoped)
+      const payload = {
+        user_id: userId,
+        org_id: orgId,
+        endpoint: sub.endpoint,
+        p256dh: keyToB64(sub.getKey("p256dh")),
+        auth:   keyToB64(sub.getKey("auth")),
+      };
+      const { error } = await supabase.from("push_subscriptions").upsert(payload, { onConflict: "endpoint" });
+      if (error) throw error;
+
+      setPushMsg("✅ Push enabled on this device.");
+    }catch(e){
+      setPushMsg(`❌ ${e?.message || String(e)}`);
+    }finally{
+      setPushBusy(false);
+    }
+  }
+
+  // helpers (self-contained; no impact on existing code)
+  function base64UrlToUint8Array(b64){
+    const padding = "=".repeat((4 - (b64.length % 4)) % 4);
+    const base64 = (b64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(base64);
+    const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  function keyToB64(key){
+    const bytes = new Uint8Array(key || []);
+    let s = "";
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s);
+  }
+
   return (
     <div className="max-w-2xl space-y-3">
       <div className="text-xl font-semibold">Settings</div>
@@ -122,6 +195,25 @@ export default function SettingsPage(){
         <div className="flex items-center justify-end">
           <button className="px-3 py-2 rounded-lg bg-gray-900 text-white text-sm" onClick={save} disabled={busy || !orgId}>Save changes</button>
         </div>
+
+        {/* --- Push notifications section (isolated) --- */}
+        <div className="pt-4 mt-4 border-t">
+          <div className="font-medium">Notifications</div>
+          <p className="text-sm text-slate-600">Enable browser push alerts for tasks on this device.</p>
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              onClick={enablePushOnThisDevice}
+              className="px-3 py-2 rounded-lg border text-sm hover:bg-slate-50 disabled:opacity-50"
+              disabled={pushBusy || !orgId}
+              title={!orgId ? "No organization selected" : "Enable push notifications on this device"}
+            >
+              {pushBusy ? "Enabling…" : "Enable push notifications"}
+            </button>
+            {pushMsg && <span className="text-sm">{pushMsg}</span>}
+          </div>
+        </div>
+        {/* --- end push section --- */}
+
       </div>
     </div>
   );
