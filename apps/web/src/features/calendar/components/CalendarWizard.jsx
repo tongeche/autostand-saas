@@ -12,6 +12,8 @@ export default function CalendarWizard({ open, onClose, onCreated, initialType='
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("10:00");
+  const [reminder, setReminder] = useState(15);
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(()=>{
@@ -29,6 +31,8 @@ export default function CalendarWizard({ open, onClose, onCreated, initialType='
       setDate(toDateInput(d)); setTime(initialTime || toTimeInput(d));
       setType(initialType || 'task');
       setTitle(suggestTitle(initialType));
+      setReminder(15);
+      setNote("");
     })();
   }, [open, initialType, initialDate, initialTime]);
 
@@ -41,7 +45,7 @@ export default function CalendarWizard({ open, onClose, onCreated, initialType='
       // Persist as lead task (date precision) and also emit calendar event with time
       const start = new Date(`${date}T${time}:00`);
       // Persist exact time in calendar_events
-      await insertEvent({ lead_id: leadId, title: title.trim(), start_at: start, kind: type, reminder_minutes: 15 });
+      await insertEvent({ lead_id: leadId, title: title.trim(), start_at: start, kind: type, reminder_minutes: reminder, note: note?.trim() || null });
       // Also log as lead task for task-type (optional; keeps task lists in sync)
       if (type === 'task') await createLeadTask(leadId, { title: title.trim(), due_date: date });
       try { window.dispatchEvent(new CustomEvent('autostand:calendar:event', { detail: { lead_id: leadId, title: title.trim(), start, kind: type } })); } catch {}
@@ -88,6 +92,23 @@ export default function CalendarWizard({ open, onClose, onCreated, initialType='
               <input type="time" className="w-full rounded-lg border px-3 py-2 text-sm" value={time} onChange={(e)=> setTime(e.target.value)} />
             </label>
           </div>
+          <label className="text-sm block">
+            <div className="text-slate-600 mb-1">Reminder</div>
+            <select className="w-full rounded-lg border px-3 py-2 text-sm" value={String(reminder)} onChange={(e)=> setReminder(parseInt(e.target.value, 10))}>
+              <option value="0">No reminder</option>
+              <option value="5">5 minutes before</option>
+              <option value="10">10 minutes before</option>
+              <option value="15">15 minutes before</option>
+              <option value="30">30 minutes before</option>
+              <option value="60">1 hour before</option>
+              <option value="120">2 hours before</option>
+              <option value="1440">1 day before</option>
+            </select>
+          </label>
+          <label className="text-sm block">
+            <div className="text-slate-600 mb-1">Notes</div>
+            <textarea className="w-full rounded-lg border px-3 py-2 text-sm min-h-[90px]" value={note} onChange={(e)=> setNote(e.target.value)} placeholder="Add details or notes here..." />
+          </label>
           <div className="flex items-center justify-end gap-2">
             <button className="px-3 py-2 border rounded" onClick={onClose}>Cancel</button>
             <button className="px-3 py-2 rounded bg-gray-900 text-white inline-flex items-center gap-2" onClick={create} disabled={busy || !leadId || !title.trim() || !date}>

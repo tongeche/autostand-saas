@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
+import { getCandidateBases, getFunctionsBase, detectFunctionsBase } from "../../../lib/functionsBase";
 import { supabase } from "../../../lib/supabase";
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+const DEFAULT_FUNCTIONS_BASE = '/.netlify/functions';
 
 export default function SettingsPage(){
   const [orgId, setOrgId] = useState(null);
@@ -13,6 +15,10 @@ export default function SettingsPage(){
   // Push-related UI (kept separate to avoid touching your existing msg/busy)
   const [pushMsg, setPushMsg] = useState("");
   const [pushBusy, setPushBusy] = useState(false);
+  const [pushCount, setPushCount] = useState(0);
+  const [fnBase, setFnBase] = useState(getFunctionsBase());
+  const [fnOk, setFnOk] = useState(null); // null | true | false
+  const [fnHint, setFnHint] = useState("");
 
   useEffect(()=>{
     (async ()=>{
@@ -41,8 +47,34 @@ export default function SettingsPage(){
           date_format: s.date_format || '',
           business_type: s.business_type || 'cars'
         });
+        // load existing device subs count
+        try{
+          const { count } = await supabase
+            .from('push_subscriptions')
+            .select('*', { count:'exact', head:true })
+            .eq('user_id', uid)
+            .eq('org_id', id);
+          setPushCount(count || 0);
+        }catch{}
       }catch(e){ setMsg(e.message || String(e)); }
     })();
+  }, []);
+
+  // Auto-detect best functions base among candidates and show hint
+  useEffect(()=>{
+    let cancelled = false;
+    (async ()=>{
+      const selected = await detectFunctionsBase();
+      if (cancelled) return;
+      setFnBase(selected);
+      // Validate once more for message
+      try{
+        const res = await fetch(`${selected}/push-send`, { method: 'OPTIONS' });
+        if (res.ok || res.status === 204){ setFnOk(true); setFnHint(`Connected via ${selected}`); }
+        else { setFnOk(false); setFnHint(`Functions not reachable at ${selected} (status ${res.status}).`); }
+      }catch{ setFnOk(false); setFnHint(`Functions not reachable at ${selected}.`); }
+    })();
+    return ()=> { cancelled = true; };
   }, []);
 
   async function save(){
@@ -123,6 +155,7 @@ export default function SettingsPage(){
       const { error } = await supabase.from("push_subscriptions").upsert(payload, { onConflict: "endpoint" });
       if (error) throw error;
 
+      try{ const { count } = await supabase.from('push_subscriptions').select('*', { count:'exact', head:true }).eq('user_id', userId).eq('org_id', orgId); setPushCount(count||0); }catch{}
       setPushMsg("✅ Push enabled on this device.");
     }catch(e){
       setPushMsg(`❌ ${e?.message || String(e)}`);
@@ -130,6 +163,22 @@ export default function SettingsPage(){
       setPushBusy(false);
     }
   }
+async function disablePushOnThisDevice(){
+  try{
+    setPushBusy(true); setPushMsg("");
+    const { data: u } = await supabase.auth.getUser();
+    const userId = u?.user?.id; if (!userId || !orgId) throw new Error('Missing user/org');
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = await reg?.pushManager.getSubscription();
+    if (sub){ await sub.unsubscribe(); }
+    // delete server record by endpoint
+    if (sub?.endpoint){ await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint).eq('user_id', userId); }
+    try{ const { count } = await supabase.from('push_subscriptions').select('*', { count:'exact', head:true }).eq('user_id', userId).eq('org_id', orgId); setPushCount(count||0); }catch{}
+    setPushMsg('✅ Push disabled on this device.');
+  }catch(e){ setPushMsg(`❌ ${e?.message || String(e)}`); }
+  finally{ setPushBusy(false); }
+}
+
 async function sendTestPush(){
   try{
     setPushMsg("Sending…");
@@ -137,7 +186,7 @@ async function sendTestPush(){
     const userId = u?.user?.id;
     if (!userId || !orgId) throw new Error("Missing user/org");
 
-    const res = await fetch("/.netlify/functions/push-send", {
+    const res = await fetch(`${fnBase}/push-send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -147,8 +196,14 @@ async function sendTestPush(){
       })
     });
 
-    const json = await res.json().catch(() => ({}));
-    setPushMsg(`Response: ${res.status} ${JSON.stringify(json)}`);
+    // Try JSON, fallback to text to surface Netlify error pages/helpful messages
+    let msgBody = {};
+    try { msgBody = await res.json(); }
+    catch {
+      try { const txt = await res.text(); msgBody = { raw: (txt || '').slice(0, 300) }; }
+      catch { msgBody = {}; }
+    }
+    setPushMsg(`Response: ${res.status} ${JSON.stringify(msgBody)}`);
   } catch(e){
     setPushMsg(`❌ ${e?.message || String(e)}`);
   }
@@ -223,9 +278,21 @@ async function sendTestPush(){
 
         {/* --- Push notifications section (isolated) --- */}
         <div className="pt-4 mt-4 border-t">
-          <div className="font-medium">Notifications</div>
-          <p className="text-sm text-slate-600">Enable browser push alerts for tasks on this device.</p>
-          <div className="flex items-center gap-2 mt-2">
+      <div className="font-medium">Notifications</div>
+      <p className="text-sm text-slate-600">Enable browser push alerts for tasks on this device.</p>
+      <div className="text-xs text-slate-600 flex items-center gap-2">
+        <span>Functions:</span>
+        {fnOk === null ? (
+          <span>checking…</span>
+        ) : fnOk ? (
+          <span className="text-emerald-700">OK — {fnHint}</span>
+        ) : (
+          <span className="text-amber-700">{fnHint}</span>
+        )}
+      </div>
+      <div className="text-[11px] text-slate-500 mt-1">Trying bases: {getCandidateBases().join(', ')}</div>
+          <div className="text-xs text-slate-600">Registered devices for your account in this org: <span className="font-medium">{pushCount}</span></div>
+          <div className="flex items-center flex-wrap gap-2 mt-2">
             <button
               onClick={enablePushOnThisDevice}
               className="px-3 py-2 rounded-lg border text-sm hover:bg-slate-50 disabled:opacity-50"
@@ -233,6 +300,14 @@ async function sendTestPush(){
               title={!orgId ? "No organization selected" : "Enable push notifications on this device"}
             >
               {pushBusy ? "Enabling…" : "Enable push notifications"}
+            </button>
+            <button
+              onClick={disablePushOnThisDevice}
+              className="px-3 py-2 rounded-lg border text-sm hover:bg-slate-50 disabled:opacity-50"
+              disabled={pushBusy || !orgId}
+              title={!orgId ? "No organization selected" : "Disable push on this device"}
+            >
+              Disable on this device
             </button>
             {pushMsg && <span className="text-sm">{pushMsg}</span>}
           </div>

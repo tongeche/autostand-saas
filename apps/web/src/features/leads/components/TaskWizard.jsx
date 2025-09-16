@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FiX, FiSave, FiClock, FiBell, FiUser } from "react-icons/fi";
 import { createLeadTask, fetchLeadTasks } from "../services/supabase";
+import { supabase } from "../../../lib/supabase"; // ⬅️ added
 
 export default function TaskWizard({ open, lead, onClose, onCreated, defaultAssignee = "auto" }){
   const [title, setTitle] = useState("");
@@ -32,7 +33,44 @@ export default function TaskWizard({ open, lead, onClose, onCreated, defaultAssi
       if (assignee === 'owner') assignee_id = lead?.owner_id || null;
       else if (assignee === 'assigned') assignee_id = lead?.assignee_id || null;
       else if (assignee === 'auto') assignee_id = lead?.owner_id || lead?.assignee_id || null;
+
       const task = await createLeadTask(lead.id, { title: title.trim(), due_date, assignee_id });
+
+      // 🔔 fire-and-forget push to current user in this org (non-blocking, won’t break flow)
+      try {
+        const { data: userWrap } = await supabase.auth.getUser();
+        const userId = userWrap?.user?.id;
+        const orgId = lead?.org_id || null;
+        if (userId) {
+          // lazy import to avoid increasing initial bundle
+          const { sendTaskPush } = await import("../../notifications/services/pushClient").catch(() => ({ sendTaskPush: null }));
+          if (sendTaskPush) {
+            sendTaskPush({
+              userId,
+              orgId,
+              task: { id: task.id, title: task.title }
+            });
+          } else {
+            // direct call fallback if helper isn’t present
+            const { getFunctionsBase } = await import("../../../lib/functionsBase");
+            const base = getFunctionsBase();
+            fetch(`${base}/push-send`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                user_id: userId,
+                org_id: orgId || undefined,
+                payload: {
+                  title: "New Task",
+                  body: task.title || "You have a new task",
+                  data: { url: `/tasks/${task.id}` }
+                }
+              })
+            }).catch(()=>{});
+          }
+        }
+      } catch { /* ignore push errors */ }
+
       if (remind && due_date) {
         const remind_at = new Date(new Date(due_date).getTime() - remindBefore*60*1000);
         try { window.dispatchEvent(new CustomEvent("autostand:task:reminder", { detail: { lead_id: lead.id, task_id: task.id, remind_at } })); } catch {}

@@ -1,20 +1,30 @@
 import React, { useEffect, useState } from "react";
 import { FiX, FiSave } from "react-icons/fi";
 import { createLead } from "../services/supabase";
-import { listStagingPlates } from "../../inventory/services/cars";
+import { listCars } from "../../inventory/services/cars";
+
+const SOURCE_OPTIONS = [
+  { value:'whatsapp', label:'WhatsApp' },
+  { value:'stand_virtual', label:'Stand Virtual' },
+  { value:'piscapisca', label:'PiscaPisca' },
+  { value:'website', label:'Website' },
+  { value:'facebook', label:'Facebook' },
+  { value:'instagram', label:'Instagram' },
+  { value:'other', label:'Other' },
+];
 
 export default function AddLeadWizard({ open, onClose, onCreated }){
-  const [form, setForm] = useState({ name:"", phone:"", email:"", source:"", plate:"" });
-  const [plates, setPlates] = useState([]);
+  const [form, setForm] = useState({ name:"", phone:"", source:"", source_url:"", plate:"", carId:null });
+  const [cars, setCars] = useState([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(()=>{
     if (!open) return;
-    setForm({ name:"", phone:"", email:"", source:"", plate:"" });
-    // load plates from staging to attach a car
+    setForm({ name:"", phone:"", source:"", source_url:"", plate:"", carId:null });
+    // load cars from inventory to link a car
     (async ()=>{
-      try { const p = await listStagingPlates(); setPlates(p || []); }
-      catch { setPlates([]); }
+      try { const { rows } = await listCars({ limit: 100 }); setCars(rows || []); }
+      catch { setCars([]); }
     })();
   }, [open]);
 
@@ -27,9 +37,12 @@ export default function AddLeadWizard({ open, onClose, onCreated }){
       const payload = {
         name: form.name.trim(),
         phone: form.phone.trim() || null,
-        email: form.email.trim() || null,
         source: form.source.trim() || null,
         plate: form.plate.trim() || null,
+        meta: {
+          ...(form.carId ? { car_id: form.carId } : {}),
+          ...(form.source_url?.trim() ? { source_url: form.source_url.trim() } : {}),
+        },
         status: 'new',
         archived: false,
       };
@@ -56,22 +69,42 @@ export default function AddLeadWizard({ open, onClose, onCreated }){
           <Field label="Phone">
             <input className="w-full rounded-lg border px-3 py-2 text-sm" value={form.phone} onChange={(e)=> setForm(f=>({...f,phone:e.target.value}))} placeholder="+351 …"/>
           </Field>
-          <Field label="Email">
-            <input className="w-full rounded-lg border px-3 py-2 text-sm" value={form.email} onChange={(e)=> setForm(f=>({...f,email:e.target.value}))} placeholder="john@example.com"/>
-          </Field>
-          <Field label="Source">
-            <input className="w-full rounded-lg border px-3 py-2 text-sm" value={form.source} onChange={(e)=> setForm(f=>({...f,source:e.target.value}))} placeholder="https://…"/>
-          </Field>
-          <Field label="Plate">
-            {plates && plates.length > 0 ? (
-              <select className="w-full rounded-lg border px-3 py-2 text-sm" value={form.plate}
-                onChange={(e)=> setForm(f=>({...f, plate: e.target.value}))}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <Field label="Source">
+              <select className="w-full rounded-lg border px-3 py-2 text-sm" value={form.source}
+                onChange={(e)=> setForm(f=>({...f,source:e.target.value}))}
               >
-                <option value="">Select plate…</option>
-                {plates.map(p => <option key={p} value={p}>{p}</option>)}
+                <option value="">Select…</option>
+                {SOURCE_OPTIONS.map(o=> <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </Field>
+            <Field label="URL" >
+              <input className="w-full rounded-lg border px-3 py-2 text-sm" value={form.source_url}
+                onChange={(e)=> setForm(f=>({...f,source_url:e.target.value}))}
+                placeholder="https://…"
+              />
+            </Field>
+            <div className="hidden sm:block"></div>
+          </div>
+          <Field label="Car">
+            {cars && cars.length > 0 ? (
+              <select className="w-full rounded-lg border px-3 py-2 text-sm" value={form.carId || ''}
+                onChange={(e)=>{
+                  const id = e.target.value || null;
+                  const car = (cars||[]).find(c=> String(c.id) === String(id));
+                  setForm(f=>({...f, carId: id, plate: car?.plate || '' }));
+                }}
+              >
+                <option value="">Select car…</option>
+                {cars.map(c => (
+                  <option key={c.id} value={c.id}>{labelForCar(c)}</option>
+                ))}
               </select>
             ) : (
-              <input className="w-full rounded-lg border px-3 py-2 text-sm" value={form.plate} onChange={(e)=> setForm(f=>({...f,plate:e.target.value}))} placeholder="AA-00-AA"/>
+              <input className="w-full rounded-lg border px-3 py-2 text-sm" value={form.plate} onChange={(e)=> setForm(f=>({...f,plate:e.target.value}))} placeholder="Type plate (no cars yet)"/>
+            )}
+            {form.carId && (
+              <div className="mt-1 text-xs text-slate-600">Selected plate: <span className="font-medium">{form.plate}</span></div>
             )}
           </Field>
 
@@ -94,4 +127,9 @@ function Field({ label, children }){
       {children}
     </label>
   );
+}
+
+function labelForCar(c){
+  const name = [c.make, c.model, c.version].filter(Boolean).join(' ');
+  return `${name || 'Car'} → ${c.plate || '—'}`;
 }

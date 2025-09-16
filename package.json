@@ -2,16 +2,17 @@
   "name": "autostand-api-v2",
   "private": true,
   "type": "module",
-  
-    "scripts": {
-      "build:web": "pnpm -C apps/web build",
-      "build:api": "pnpm -C apps/api build",
-      "build": "pnpm run build:api|| true && pnpm run build:web"
-    },
-  
+  "scripts": {
+    "build:web": "pnpm -C apps/web build",
+    "build:api": "pnpm -C apps/api build",
+    "build": "pnpm run build:api|| true && pnpm run build:web"
+  },
   "devDependencies": {
-    "typescript": "^5.5.4",
     "@types/node": "^20.12.12",
-    "netlify-cli": "^17.38.1"
+    "netlify-cli": "^17.38.1",
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.2"
   }
 }

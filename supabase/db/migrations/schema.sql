@@ -209,6 +209,7 @@ CREATE TABLE IF NOT EXISTS "public"."calendar_events" (
     "start_at" timestamp with time zone NOT NULL,
     "kind" "text" DEFAULT 'task'::"text" NOT NULL,
     "reminder_minutes" integer DEFAULT 15 NOT NULL,
+    "note" text,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     CONSTRAINT "calendar_events_kind_chk" CHECK (("kind" = ANY (ARRAY['task'::"text", 'schedule'::"text", 'reminder'::"text"]))),

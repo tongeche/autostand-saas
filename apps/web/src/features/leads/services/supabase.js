@@ -77,6 +77,7 @@ export async function createLead(payload){
     archived: payload.archived ?? false,
     org_id: ORG(),
   };
+  if (payload.meta && typeof payload.meta === 'object') base.meta = payload.meta;
   const { data, error } = await supabase
     .from('leads')
     .insert([base])

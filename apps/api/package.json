@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "tsc -w"
   },
+  "dependencies": {
+    "jszip": "^3.10.1"
+  },
   "devDependencies": {
     "@types/node": "^24.3.1",
     "@types/web-push": "^3.6.4",

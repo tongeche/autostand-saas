@@ -28,7 +28,7 @@ export default function CalendarPage(){
     const to = mode === 'week' ? addDays(days[6], 1) : addDays(monthDays[monthDays.length-1], 1);
     try{
       const evs = await listEventsBetween({ from, to });
-      const mapped = evs.map(e => ({ id:e.id, lead_id: e.lead_id || null, title:e.title||'(untitled)', start: new Date(e.start_at), kind: e.kind||'task' }));
+      const mapped = evs.map(e => ({ id:e.id, lead_id: e.lead_id || null, title:e.title||'(untitled)', start: new Date(e.start_at), kind: e.kind||'task', note: e.note || '', reminder_minutes: e.reminder_minutes }));
       setEvents(mapped);
       const leadIds = Array.from(new Set(mapped.map(m=> m.lead_id).filter(Boolean)));
       if (leadIds.length){
@@ -84,7 +84,7 @@ export default function CalendarPage(){
     const to = addDays(weekStart, 7);
     try{
       const evs = await listEventsBetween({ from, to });
-      return evs.map(e => ({ id:e.id, title:e.title||'(untitled)', start: new Date(e.start_at), kind: e.kind||'task' }));
+      return evs.map(e => ({ id:e.id, title:e.title||'(untitled)', start: new Date(e.start_at), kind: e.kind||'task', note: e.note || '', reminder_minutes: e.reminder_minutes }));
     } catch {
       // fallback to tasks
       const fromD = toISODate(from);
@@ -183,7 +183,7 @@ export default function CalendarPage(){
                   {/* events */}
                   {events.filter(e=> isSameDay(e.start,d)).map((e)=> (
                     <DraggableEvent key={e.id} event={e} lead={leadMap[e.lead_id]}
-                      onDrop={(newDate)=> updateEventTime(e.id, newDate)}
+                      onDrop={async (newDate)=> { try{ await updateEventStart(e.id, newDate); setEvents(prev => prev.map(x => x.id===e.id ? { ...x, start: newDate } : x)); } catch(err){ alert(err?.message || 'Failed to update event'); } }}
                       onEdit={()=> setEditEvent(e)}
                     />
                   ))}
@@ -199,6 +199,10 @@ export default function CalendarPage(){
             <MonthGrid days={monthDays} monthStart={monthStart} events={events} leads={leadMap}
               onNew={(d)=> { setInitDate(toISODate(d)); setInitTime('10:00'); setInitialType('task'); setOpen(true); }}
               onEdit={(e)=> setEditEvent(e)}
+              onMove={async (evObj, newDate)=>{
+                try{ await updateEventStart(evObj.id, newDate); setEvents(prev => prev.map(x => x.id===evObj.id ? { ...x, start: newDate } : x)); }
+                catch(err){ alert(err?.message || 'Failed to update event'); }
+              }}
             />
           )}
         </div>
@@ -232,14 +236,15 @@ function DraggableEvent({ event, onDrop, onEdit, lead }){
   const [top, setTop] = useState(posY(event.start));
   return (
     <div
-      className={`absolute left-2 right-2 rounded-xl p-2 text-xs shadow ${dragging ? 'opacity-80' : ''}`}
+      className={`absolute left-2 right-2 rounded-xl p-2 text-xs shadow transition-shadow ${dragging ? 'opacity-80 shadow-md' : 'hover:shadow-md'}`}
       style={{ top, height: '64px', ...eventStyle(event.kind) }}
       title={event.title}
-      onMouseDown={(e)=>{ setDragging(true); const startY=e.clientY; const startTop=posY(event.start); const onMove=(ev)=>{ const dy=ev.clientY-startY; setTop(`calc(${startTop} + ${dy}px)`); }; const onUp=(ev)=>{ document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); setDragging(false); const dy=ev.clientY-startY; const minutes=Math.round((dy/64)*60); const dt=new Date(event.start); dt.setMinutes(dt.getMinutes()+minutes); onDrop?.(dt); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }}
-      onTouchStart={(e)=>{ setDragging(true); const startY=e.touches[0].clientY; const startTop=posY(event.start); const onMove=(ev)=>{ const dy=ev.touches[0].clientY-startY; setTop(`calc(${startTop} + ${dy}px)`); }; const onEnd=(ev)=>{ document.removeEventListener('touchmove', onMove); document.removeEventListener('touchend', onEnd); setDragging(false); const endY = (ev.changedTouches && ev.changedTouches[0]?.clientY) || startY; const dy=endY-startY; const minutes=Math.round((dy/64)*60); const dt=new Date(event.start); dt.setMinutes(dt.getMinutes()+minutes); onDrop?.(dt); }; document.addEventListener('touchmove', onMove, { passive:false }); document.addEventListener('touchend', onEnd); }}
-      onClick={(e)=>{ if (!dragging) onEdit?.(); }}
+      onMouseDown={(e)=>{ e.stopPropagation(); setDragging(true); const startY=e.clientY; const startX=e.clientX; const startTop=posY(event.start); const dayWidth=(e.currentTarget.parentElement?.getBoundingClientRect()?.width)||120; const gridEl=document.getElementById('calendar-grid'); const gridRect=gridEl ? gridEl.getBoundingClientRect() : null; const onMove=(ev)=>{ const dy=ev.clientY-startY; setTop(`calc(${startTop} + ${dy}px)`); }; const onUp=(ev)=>{ document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); setDragging(false); const dy=ev.clientY-startY; const dx=ev.clientX-startX; // compute time + day offsets
+        const minutes=Math.round((dy/64)*60); const dayOffset=Math.max(-6, Math.min(6, Math.round(dx/Math.max(1, dayWidth)))); const dt=new Date(event.start); dt.setMinutes(dt.getMinutes()+minutes); if (dayOffset) dt.setDate(dt.getDate()+dayOffset); onDrop?.(dt); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }}
+      onTouchStart={(e)=>{ e.stopPropagation(); setDragging(true); const startY=e.touches[0].clientY; const startX=e.touches[0].clientX; const startTop=posY(event.start); const dayWidth=(e.currentTarget.parentElement?.getBoundingClientRect()?.width)||120; const onMove=(ev)=>{ const dy=ev.touches[0].clientY-startY; setTop(`calc(${startTop} + ${dy}px)`); }; const onEnd=(ev)=>{ document.removeEventListener('touchmove', onMove); document.removeEventListener('touchend', onEnd); setDragging(false); const end = (ev.changedTouches && ev.changedTouches[0]) || { clientX:startX, clientY:startY }; const dy=end.clientY-startY; const dx=end.clientX-startX; const minutes=Math.round((dy/64)*60); const dayOffset=Math.max(-6, Math.min(6, Math.round(dx/Math.max(1, dayWidth)))); const dt=new Date(event.start); dt.setMinutes(dt.getMinutes()+minutes); if (dayOffset) dt.setDate(dt.getDate()+dayOffset); onDrop?.(dt); }; document.addEventListener('touchmove', onMove, { passive:false }); document.addEventListener('touchend', onEnd); }}
+      onClick={(e)=>{ e.stopPropagation(); if (!dragging) onEdit?.(); }}
     >
-      <div className="font-medium truncate">{event.title}</div>
+      <div className="font-medium truncate">{event.title} {event.note ? <span title="Has notes">📝</span> : null}</div>
       <div className="mt-1 flex items-center justify-between">
         <div className="inline-flex items-center gap-1">
           {lead && <AvatarCircle name={lead.name||lead.plate||'Lead'} />}
@@ -265,18 +270,28 @@ function QuickEventEditModal({ open, event, lead, onClose, onSaved }){
   const [title, setTitle] = useState(event?.title || '');
   const [kind, setKind] = useState(event?.kind || 'task');
   const [time, setTime] = useState(event ? toTime(event.start) : '10:00');
+  const [note, setNote] = useState(event?.note || '');
+  const [reminder, setReminder] = useState(typeof event?.reminder_minutes === 'number' ? event.reminder_minutes : 15);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   useEffect(()=>{
-    if (open){ setTitle(event?.title||''); setKind(event?.kind||'task'); setTime(event ? toTime(event.start) : '10:00'); }
+    if (open){
+      setTitle(event?.title||'');
+      setKind(event?.kind||'task');
+      setTime(event ? toTime(event.start) : '10:00');
+      setNote(event?.note || '');
+      setReminder(typeof event?.reminder_minutes === 'number' ? event.reminder_minutes : 15);
+    }
   }, [open, event]);
   if (!open) return null;
   const save = async ()=>{
     try{
       const dateStr = toISODate(event.start);
       const at = new Date(`${dateStr}T${time}:00`);
-      await supabase.from('calendar_events').update({ title, kind, start_at: at.toISOString() }).eq('id', event.id);
+      await supabase.from('calendar_events').update({ title, kind, start_at: at.toISOString(), note, reminder_minutes: reminder }).eq('id', event.id);
       onSaved?.();
     } catch(e){ alert(e?.message || 'Failed to update'); }
   };
+  const remove = ()=> setConfirmOpen(true);
   return (
     <div className="fixed inset-0 z-[95] bg-black/30 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-lg overflow-hidden">
@@ -302,12 +317,49 @@ function QuickEventEditModal({ open, event, lead, onClose, onSaved }){
             <div className="text-slate-600 mb-1">Time</div>
             <input type="time" className="input w-full" value={time} onChange={(e)=> setTime(e.target.value)} />
           </div>
+          <div>
+            <div className="text-slate-600 mb-1">Reminder</div>
+            <select className="input w-full" value={String(reminder)} onChange={(e)=> setReminder(parseInt(e.target.value, 10))}>
+              <option value="0">No reminder</option>
+              <option value="5">5 minutes before</option>
+              <option value="10">10 minutes before</option>
+              <option value="15">15 minutes before</option>
+              <option value="30">30 minutes before</option>
+              <option value="60">1 hour before</option>
+              <option value="120">2 hours before</option>
+              <option value="1440">1 day before</option>
+            </select>
+          </div>
+          <div>
+            <div className="text-slate-600 mb-1">Notes</div>
+            <textarea className="input w-full min-h-[90px]" value={note} onChange={(e)=> setNote(e.target.value)} placeholder="Add details or notes here..." />
+          </div>
         </div>
-        <div className="px-4 py-3 border-t flex items-center justify-end gap-2">
-          <button className="px-3 py-2 rounded border" onClick={onClose}>Cancel</button>
-          <button className="px-3 py-2 rounded bg-gray-900 text-white" onClick={save}>Save</button>
+        <div className="px-4 py-3 border-t flex items-center justify-between gap-2">
+          <button className="px-3 py-2 rounded border border-red-200 text-red-700" onClick={remove}>Delete</button>
+          <div className="flex items-center gap-2">
+            <button className="px-3 py-2 rounded border" onClick={onClose}>Cancel</button>
+            <button className="px-3 py-2 rounded bg-gray-900 text-white" onClick={save}>Save</button>
+          </div>
         </div>
       </div>
+      {/* Confirm delete modal */}
+      {confirmOpen && (
+        <ConfirmModal
+          title="Delete Event"
+          message="Are you sure you want to delete this event? This action cannot be undone."
+          confirmText="Delete"
+          cancelText="Cancel"
+          onCancel={()=> setConfirmOpen(false)}
+          onConfirm={async ()=>{
+            try{
+              await supabase.from('calendar_events').delete().eq('id', event.id);
+              setConfirmOpen(false);
+              onSaved?.();
+            } catch(e){ alert(e?.message || 'Failed to delete'); }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -321,7 +373,7 @@ function buildMonthGrid(monthStart){
   return days;
 }
 
-function MonthGrid({ days, monthStart, events, leads, onNew, onEdit }){
+function MonthGrid({ days, monthStart, events, leads, onNew, onEdit, onMove }){
   // events by day
   const byDay = {};
   for (const e of events||[]){ const k = toISODate(e.start); (byDay[k] ||= []).push(e); }
@@ -336,16 +388,29 @@ function MonthGrid({ days, monthStart, events, leads, onNew, onEdit }){
           return (
             <div key={i} className={`rounded-xl p-2 h-24 md:h-28 lg:h-32 border ${isOtherMonth ? 'bg-slate-50 text-slate-400' : 'bg-white'} border-gray-100 flex flex-col`}
               onClick={()=> onNew?.(d)}
+              onDragOver={(ev)=> ev.preventDefault()}
+              onDrop={(ev)=>{
+                ev.preventDefault();
+                const id = ev.dataTransfer.getData('text/event-id');
+                if (!id) return;
+                const evObj = (events||[]).find(x=> String(x.id)===String(id));
+                if (!evObj) return;
+                const newDate = new Date(evObj.start);
+                newDate.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
+                onMove?.(evObj, newDate);
+              }}
             >
               <div className={`text-xs font-medium ${isOtherMonth ? 'text-slate-400' : 'text-slate-700'}`}>{d.getDate()}</div>
               <div className="mt-1 space-y-1 overflow-hidden">
                 {items.map((e,ei)=> (
-                  <button key={ei} className="w-full text-left text-[11px] truncate rounded-full px-2 py-1 border" style={eventStyle(e.kind)}
+                  <button key={ei} className="w-full text-left text-[11px] truncate rounded-full px-2 py-1 border cursor-grab shadow-sm hover:shadow-md transition-shadow" style={eventStyle(e.kind)}
+                    draggable
+                    onDragStart={(ev)=>{ ev.dataTransfer.setData('text/event-id', String(e.id)); ev.dataTransfer.effectAllowed='move'; }}
                     onClick={(ev)=> { ev.stopPropagation(); onEdit?.(e); }}
                   >
                     <span className="inline-flex items-center gap-1">
                       {leads[e.lead_id] && <span className="h-4 w-4 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[9px]">{(leads[e.lead_id].name||leads[e.lead_id].plate||'U').slice(0,2).toUpperCase()}</span>}
-                      <span className="truncate">{e.title}</span>
+                      <span className="truncate">{e.title} {e.note ? '📝' : ''}</span>
                     </span>
                   </button>
                 ))}
@@ -354,6 +419,21 @@ function MonthGrid({ days, monthStart, events, leads, onNew, onEdit }){
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function ConfirmModal({ title='Confirm', message, confirmText='OK', cancelText='Cancel', onConfirm, onCancel }){
+  return (
+    <div className="fixed inset-0 z-[110] bg-black/40 flex items-center justify-center p-4" onClick={onCancel}>
+      <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl overflow-hidden" onClick={(e)=> e.stopPropagation()}>
+        <div className="px-4 py-3 border-b font-medium">{title}</div>
+        <div className="p-4 text-sm text-slate-700">{message}</div>
+        <div className="px-4 py-3 border-t flex items-center justify-end gap-2">
+          <button className="px-3 py-2 rounded border" onClick={onCancel}>{cancelText}</button>
+          <button className="px-3 py-2 rounded bg-red-600 text-white" onClick={onConfirm}>{confirmText}</button>
+        </div>
       </div>
     </div>
   );

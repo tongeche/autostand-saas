@@ -11,7 +11,7 @@ import { supabase } from "../../lib/supabase";
 import { getTenantId } from "../../lib/tenant";
 import { listEventsBetween } from "../../features/calendar/services/events";
 import { fetchStats } from "../../features/dashboard/stats";
-import { listTenantActivity, listUpcomingTasksTenant } from "../../features/leads/services/supabase";
+import { listTenantActivity, listUpcomingTasksTenant, updateLeadTask, toggleLeadTaskDone, deleteLeadTask } from "../../features/leads/services/supabase";
 import { listDeliverable, markRead } from "../../features/notifications/services/notifications";
 import QuickTaskModal from "../../features/todos/components/QuickTaskModal.jsx";
 import { formatShortDate } from "../../features/todos/components/shared";
@@ -83,6 +83,121 @@ function Task({ text, right }) {
   );
 }
 
+function InlineTaskRow({ task, onChange, onToggleDone, onDelete }){
+  const [editing, setEditing] = useState(null); // null | 'title' | 'due'
+  const [title, setTitle] = useState(task?.title||'');
+  const [due, setDue] = useState(task?.due_date || '');
+  useEffect(()=>{ setTitle(task?.title||''); setDue(task?.due_date||''); setEditing(null); }, [task?.id]);
+
+  const saveTitle = async ()=>{
+    await onChange?.({ title });
+    setEditing(null);
+  };
+  const saveDue = async ()=>{
+    await onChange?.({ due_date: due||null });
+    setEditing(null);
+  };
+
+  const onKey = (e, saveFn, cancelFn) => {
+    if (e.key === 'Enter') { e.preventDefault(); saveFn(); }
+    if (e.key === 'Escape') { e.preventDefault(); cancelFn(); }
+  };
+
+  return (
+    <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 hover:bg-slate-100">
+      <div className="flex items-center gap-3 min-w-0">
+        <input
+          type="checkbox"
+          className="accent-[var(--color-primary)]"
+          checked={task.status==='done' || task.done}
+          onChange={(e)=> onToggleDone?.(e.target.checked)}
+          onClick={(e)=> e.stopPropagation()}
+        />
+        <div className="min-w-0">
+          {editing === 'title' ? (
+            <div className="flex items-center gap-2">
+              <input
+                className="text-sm bg-white rounded border px-2 py-1 w-56"
+                value={title}
+                autoFocus
+                onChange={(e)=> setTitle(e.target.value)}
+                onKeyDown={(e)=> onKey(e, saveTitle, ()=>{ setTitle(task.title||''); setEditing(null); })}
+                onClick={(e)=> e.stopPropagation()}
+              />
+              <button className="text-xs px-2 py-1 rounded border" onClick={(e)=>{ e.stopPropagation(); setTitle(task.title||''); setEditing(null); }}>Cancel</button>
+              <button className="text-xs px-2 py-1 rounded bg-gray-900 text-white" onClick={(e)=>{ e.stopPropagation(); saveTitle(); }}>Save</button>
+            </div>
+          ) : (
+            <button className="text-left text-sm truncate" onClick={()=> setEditing('title')} title="Edit title">{task.title || '(untitled)'}</button>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        {editing === 'due' ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              className="text-xs bg-white rounded border px-2 py-1"
+              value={due||''}
+              autoFocus
+              onChange={(e)=> setDue(e.target.value)}
+              onKeyDown={(e)=> onKey(e, saveDue, ()=>{ setDue(task.due_date||''); setEditing(null); })}
+              onClick={(e)=> e.stopPropagation()}
+            />
+            <button className="text-xs px-2 py-1 rounded border" onClick={(e)=>{ e.stopPropagation(); setDue(task.due_date||''); setEditing(null); }}>Cancel</button>
+            <button className="text-xs px-2 py-1 rounded bg-gray-900 text-white" onClick={(e)=>{ e.stopPropagation(); saveDue(); }}>Save</button>
+          </div>
+        ) : (
+          <button className="text-xs text-slate-600" onClick={()=> setEditing('due')} title="Edit due date">{task.due_date ? formatShortDate(task.due_date) : '—'}</button>
+        )}
+        <button className="text-xs px-2 py-1 rounded border border-red-200 text-red-700" onClick={(e)=>{ e.stopPropagation(); onDelete?.(); }}>Delete</button>
+      </div>
+    </div>
+  );
+}
+
+function toLocalInput(dt){ try{ const d=new Date(dt); const p=(n)=> String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }catch{return ''} }
+
+function InlineReminderRow({ notif, onChange, onDelete, onDone }){
+  const [editing, setEditing] = useState(null); // null | 'title' | 'time'
+  const [title, setTitle] = useState(notif?.title||'');
+  const [time, setTime] = useState(()=> toLocalInput(notif.deliver_at)); // local input datetime-local value
+  useEffect(()=>{ setTitle(notif?.title||''); setTime(toLocalInput(notif.deliver_at)); setEditing(null); }, [notif?.id]);
+
+  const saveTitle = async ()=>{ await onChange?.({ title }); setEditing(null); };
+  const saveTime = async ()=>{ const dt = time ? new Date(time) : new Date(notif.deliver_at); await onChange?.({ deliver_at: dt }); setEditing(null); };
+  const onKey = (e, saveFn, cancelFn)=>{ if (e.key==='Enter'){ e.preventDefault(); saveFn(); } if (e.key==='Escape'){ e.preventDefault(); cancelFn(); } };
+
+  return (
+    <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 hover:bg-slate-100">
+      <div className="text-sm truncate min-w-0">
+        {editing === 'title' ? (
+          <div className="flex items-center gap-2">
+            <input className="text-sm bg-white rounded border px-2 py-1 w-48" value={title} autoFocus onChange={(e)=> setTitle(e.target.value)} onKeyDown={(e)=> onKey(e, saveTitle, ()=>{ setTitle(notif.title||''); setEditing(null); })} onClick={(e)=> e.stopPropagation()} />
+            <button className="text-xs px-2 py-1 rounded border" onClick={(e)=>{ e.stopPropagation(); setTitle(notif.title||''); setEditing(null); }}>Cancel</button>
+            <button className="text-xs px-2 py-1 rounded bg-gray-900 text-white" onClick={(e)=>{ e.stopPropagation(); saveTitle(); }}>Save</button>
+          </div>
+        ) : (
+          <button className="truncate" onClick={()=> setEditing('title')} title="Edit title">{notif.title}</button>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        {editing === 'time' ? (
+          <div className="flex items-center gap-2">
+            <input type="datetime-local" className="text-xs bg-white rounded border px-2 py-1" value={time} autoFocus onChange={(e)=> setTime(e.target.value)} onKeyDown={(e)=> onKey(e, saveTime, ()=>{ setTime(toLocalInput(notif.deliver_at)); setEditing(null); })} onClick={(e)=> e.stopPropagation()} />
+            <button className="text-xs px-2 py-1 rounded border" onClick={(e)=>{ e.stopPropagation(); setTime(toLocalInput(notif.deliver_at)); setEditing(null); }}>Cancel</button>
+            <button className="text-xs px-2 py-1 rounded bg-gray-900 text-white" onClick={(e)=>{ e.stopPropagation(); saveTime(); }}>Save</button>
+          </div>
+        ) : (
+          <button className="text-xs text-slate-600" onClick={()=> setEditing('time')} title="Edit time">{new Date(notif.deliver_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}</button>
+        )}
+        <button className="text-xs underline" onClick={(e)=>{ e.stopPropagation(); onDone?.(); }}>Done</button>
+        <button className="text-xs px-2 py-1 rounded border border-red-200 text-red-700" onClick={(e)=>{ e.stopPropagation(); onDelete?.(); }}>Delete</button>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
@@ -96,8 +211,23 @@ export default function Dashboard() {
   const [reminders, setReminders] = useState([]);
   const [todayEvents, setTodayEvents] = useState([]);
   const [funnel, setFunnel] = useState({ new: 0, contacted: 0, qualified: 0, won: 0, lost: 0 });
+  const [schedule, setSchedule] = useState([]);
   const [quickOpen, setQuickOpen] = useState(false);
   const [sparks, setSparks] = useState({ total: [], news: [], active: [], inventory: [] });
+
+  // Helper: upcoming schedule events (7d)
+  const fetchScheduleSummary = async () => {
+    try{
+      const start = new Date(); start.setHours(0,0,0,0);
+      const end = new Date(); end.setDate(end.getDate()+7); end.setHours(23,59,59,999);
+      const events = await listEventsBetween({ from: start, to: end, limit: 50 });
+      return (events||[])
+        .filter(e => (e.kind||'task') === 'schedule')
+        .map(e=>({ id:e.id, title:e.title || '(untitled)', start: new Date(e.start_at), kind: e.kind||'schedule' }))
+        .sort((a,b)=> a.start - b.start)
+        .slice(0,6);
+    }catch{ return []; }
+  };
 
   useEffect(() => {
     (async () => {
@@ -105,16 +235,18 @@ export default function Dashboard() {
         setErr(null);
         const data = await fetchStats();
         setStats(data);
-        const [t, r, ev, fn] = await Promise.all([
+        const [t, r, ev, fn, sch] = await Promise.all([
           listUpcomingTasksTenant({ limit: 6 }),
           listDeliverable({ onlyUnread: true, limit: 6 }),
           fetchTodayEvents(),
           fetchFunnel(),
+          fetchScheduleSummary(),
         ]);
         setUpcoming(t || []);
         setReminders(r || []);
         setTodayEvents(ev || []);
         setFunnel(fn || { new:0, contacted:0, qualified:0, won:0, lost:0 });
+        setSchedule(sch || []);
         setSparks(makeSparks({ stats: data }));
       } catch (e) {
         console.error("Dashboard stats error:", e);
@@ -127,16 +259,18 @@ export default function Dashboard() {
           setErr(null);
           const data = await fetchStats();
           setStats(data);
-          const [t, r, ev, fn] = await Promise.all([
+          const [t, r, ev, fn, sch] = await Promise.all([
             listUpcomingTasksTenant({ limit: 6 }),
             listDeliverable({ onlyUnread: true, limit: 6 }),
             fetchTodayEvents(),
             fetchFunnel(),
+            fetchScheduleSummary(),
           ]);
           setUpcoming(t || []);
           setReminders(r || []);
           setTodayEvents(ev || []);
           setFunnel(fn || { new:0, contacted:0, qualified:0, won:0, lost:0 });
+          setSchedule(sch || []);
           setSparks(makeSparks({ stats: data }));
         } catch (e) {
           setErr(e.message || String(e));
@@ -172,6 +306,8 @@ export default function Dashboard() {
     ]);
     return { new: nw, contacted: ct, qualified: qf, won: wn, lost: ls };
   }
+
+  // moved above as arrow function to avoid hoisting quirks
 
   function makeSparks({ stats }){
     function synth(base){
@@ -248,7 +384,17 @@ export default function Dashboard() {
           {upcoming.length === 0 ? (
             <ListItem text="No upcoming tasks" />
           ) : upcoming.map((t) => (
-            <Task key={t.id} text={t.title || '(untitled)'} right={<span className="text-xs text-slate-600">{t.due_date ? formatShortDate(t.due_date) : '—'}</span>} />
+            <InlineTaskRow key={t.id} task={t}
+              onChange={async (patch)=>{
+                try{ await updateLeadTask(t.id, patch); const next = await listUpcomingTasksTenant({ limit:6 }); setUpcoming(next||[]); }catch(e){ console.error(e); }
+              }}
+              onToggleDone={async (next)=>{
+                try{ await toggleLeadTaskDone(t.id, next); const nextList = await listUpcomingTasksTenant({ limit:6 }); setUpcoming(nextList||[]); }catch(e){ console.error(e); }
+              }}
+              onDelete={async ()=>{
+                try{ await deleteLeadTask(t.id); const nextList = await listUpcomingTasksTenant({ limit:6 }); setUpcoming(nextList||[]); }catch(e){ console.error(e); }
+              }}
+            />
           ))}
         </Panel>
         <Panel title="Leads Funnel">
@@ -264,13 +410,30 @@ export default function Dashboard() {
           {(!reminders || reminders.length === 0) ? (
             <ListItem text="No reminders" />
           ) : reminders.map((n) => (
-            <div key={n.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 hover:bg-slate-100">
-              <div className="text-sm truncate">{n.title}</div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-600">{new Date(n.deliver_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}</span>
-                <button className="text-xs underline" onClick={async()=>{ try{ await markRead(n.id); setReminders(prev => prev.filter(x=> x.id !== n.id)); }catch{} }}>Done</button>
-              </div>
-            </div>
+            <InlineReminderRow key={n.id} notif={n}
+              onChange={async (patch)=>{
+                try{
+                  const payload = { ...patch };
+                  if (payload.deliver_at instanceof Date) payload.deliver_at = payload.deliver_at.toISOString();
+                  await supabase.from('notifications').update(payload).eq('id', n.id);
+                  const next = await listDeliverable({ onlyUnread:true, limit:6 }); setReminders(next||[]);
+                }catch(e){ console.error(e); }
+              }}
+              onDelete={async ()=>{
+                try{ await supabase.from('notifications').delete().eq('id', n.id); const next = await listDeliverable({ onlyUnread:true, limit:6 }); setReminders(next||[]); }catch(e){ console.error(e); }
+              }}
+              onDone={async ()=>{
+                try{ await markRead(n.id); setReminders(prev => prev.filter(x=> x.id !== n.id)); }catch{}
+              }}
+            />
+          ))}
+        </Panel>
+
+        <Panel title="Schedule Summary" action={<Badge>{schedule.length}</Badge>}>
+          {schedule.length === 0 ? (
+            <ListItem text="No scheduled events in 7d" />
+          ) : schedule.map(ev => (
+            <ListItem key={ev.id} text={`${ev.title}`} tag={ev.start.toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })} />
           ))}
         </Panel>
       </div>

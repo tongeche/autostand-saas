@@ -2,49 +2,33 @@
 
 // Show incoming push notifications
 self.addEventListener('push', (event) => {
-  let data = {};
-  try {
-    data = event.data ? event.data.json() : {};
-  } catch {
-    // if payload isn't JSON, fall back to text
-    data = { title: 'Notification', body: event.data && event.data.text ? event.data.text() : '' };
-  }
-
-  const title = data.title || 'Notification';
+  let payload = {};
+  try { payload = event.data ? event.data.json() : {}; } catch {}
+  const title = payload.title || 'Notification';
   const options = {
-    body: data.body || '',
-    // note: these paths are optional; remove if you don't have these assets
-    icon: '/icons/icon-192.png',
-    badge: '/icons/badge-72.png',
-    // pass-through data for click handling (e.g., deep link)
-    data: data.data || {},
-    actions: Array.isArray(data.actions) ? data.actions : [],
-    // keep UX snappy; the default is false
-    requireInteraction: !!data.requireInteraction
+    body: payload.body || '',
+    data: payload.data || {},
+    actions: payload.actions || [],
+    requireInteraction: !!payload.requireInteraction,
+    icon: '/icon-192.png',
+    badge: '/badge.png',
   };
-
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
 // Handle clicks on notifications (focus an open tab or open a new one)
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-
-  const targetUrl = event.notification?.data?.url || '/';
+  const url = (event.notification?.data && event.notification.data.url) || '/';
   event.waitUntil((async () => {
-    // Try to focus an existing client at the same origin
     const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of allClients) {
       try {
-        const url = new URL(client.url);
-        if (url.pathname === targetUrl || targetUrl === '/') {
-          await client.focus();
-          return;
-        }
+        const u = new URL(client.url);
+        if (u.pathname === url && 'focus' in client) return client.focus();
       } catch {}
     }
-    // Otherwise open a new window/tab
-    await clients.openWindow(targetUrl);
+    if (clients.openWindow) return clients.openWindow(url);
   })());
 });
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RespondWizard } from "./respond_wizard";
 import TaskWizard from "./TaskWizard";
+import CalendarWizard from "../../calendar/components/CalendarWizard.jsx";
 import { fetchLeadTasks, fetchLeadActivity, fetchLeadNotes, createLeadTask, updateLeadTask, toggleLeadTaskDone, deleteLeadTask } from "../services/supabase";
 
 import {
@@ -109,6 +110,17 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
   const [taskFilter, setTaskFilter] = useState('all'); // all | open | overdue
   const [assignee, setAssignee] = useState('auto');    // auto | owner | assigned | none
   const [taskWizardOpen, setTaskWizardOpen] = useState(false);
+  const [reminderWizardOpen, setReminderWizardOpen] = useState(false);
+  const [car, setCar] = useState(null);
+  // Notes + Tasks lightweight editors
+  const [noteDraftOpen, setNoteDraftOpen] = useState(false);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDue, setNewTaskDue] = useState('');
+  const [editTaskId, setEditTaskId] = useState(null);
+  const [editTaskTitle, setEditTaskTitle] = useState('');
+  const [editTaskDue, setEditTaskDue] = useState('');
 
   // Load details when opening
   useEffect(() => {
@@ -116,10 +128,11 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
     setForm({
       name: lead.name || "",
       phone: lead.phone || "",
-      email: lead.email || "",
       source: lead.source || "",
       plate: lead.plate || "",
       status: lead.status || "new",
+      source_url: (lead?.meta && lead.meta.source_url) || "",
+      car_id: (lead?.meta && lead.meta.car_id) || null,
     });
     (async () => {
       const [n, acts, t] = await Promise.all([
@@ -135,6 +148,18 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
     // default assignee mode when opening lead
     setAssignee(lead?.owner_id ? 'owner' : (lead?.assignee_id ? 'assigned' : 'auto'));
   }, [open, lead, taskFilter]);
+
+  // Fetch vehicle info when car_id is present
+  useEffect(()=>{
+    (async ()=>{
+      try{
+        const id = (lead?.meta && lead.meta.car_id) || (form?.car_id);
+        if (!id) { setCar(null); return; }
+        const { data } = await supabase.from('cars').select('id,make,model,version,plate').eq('id', id).maybeSingle();
+        setCar(data || null);
+      }catch{ setCar(null); }
+    })();
+  }, [lead?.meta, form?.car_id]);
 
   // esc closes
   useEffect(() => {
@@ -163,10 +188,14 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
       const patch = {
         name: form.name.trim(),
         phone: form.phone.trim() || null,
-        email: form.email.trim() || null,
         source: form.source.trim() || null,
         plate: form.plate.trim() || null,
         status: form.status,
+        meta: {
+          ...(lead?.meta || {}),
+          ...(form.source_url ? { source_url: form.source_url } : {}),
+          ...(form.car_id ? { car_id: form.car_id } : {}),
+        },
       };
       await updateLead(lead.id, patch);
       onChanged?.("edit");
@@ -282,18 +311,23 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
 
           {/* Quick Access chips */}
           <Section icon={<FiInfo />} title="Quick Access">
-            <div className="flex flex-wrap gap-2">
-              <ActionChip icon={<FaWhatsapp />}     label="WhatsApp"     onClick={openWhatsApp} style="success" />
-              <ActionChip icon={<FiExternalLink />} label="Source"       onClick={openSource}   style="primary" />
-              <ActionChip icon={<FiFileText />}     label="Notes"        onClick={() => notesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
-              <ActionChip icon={<FiFileText />}     label="Send PDF"     onClick={openSendPDF} />
-              <ActionChip icon={<FiClock />}        label="Task"         onClick={()=> setTaskWizardOpen(true)} />
-              <ActionChip icon={<FiTag />}          label={`Status: ${(form?.status || "new")}`} onClick={() => {}} />
-              <ActionChip icon={<FiTag />}          label={`Plate: ${form?.plate || "—"}`} onClick={() => {
-                if (!form?.plate) return;
-                navigator.clipboard?.writeText(form.plate).catch(()=>{});
-              }} />
-              <ActionChip icon={<FiBell />}         label="Reminder"     onClick={openReminder} style="warn" />
+            <div className="flex flex-wrap gap-2 items-center">
+              {/* Info pills */}
+              <span className={`${tone.chip} ${tone.soft} cursor-default`}>Client: <span className="font-medium">{form?.name || lead.name || '—'}</span></span>
+              {car ? (
+                <ActionChip
+                  icon={<FiTag />}
+                  label={`Vehicle: ${[car.make,car.model,car.version].filter(Boolean).join(' ') || 'Car'} → ${car.plate || '—'}`}
+                  onClick={()=> navigate(`/inventory?q=${encodeURIComponent(car.plate || '')}`)}
+                  style="primary"
+                />
+              ) : (
+                <span className={`${tone.chip} ${tone.soft} cursor-default`}>Plate: <span className="font-medium">{form?.plate || '—'}</span></span>
+              )}
+
+              {/* Actions (only two) */}
+              <ActionChip icon={<FiMessageSquare />} label="Message"  onClick={()=> setRespondOpen(true)} style="primary" />
+              <ActionChip icon={<FaWhatsapp />}     label="WhatsApp"  onClick={openWhatsApp} style="success" />
             </div>
           </Section>
 
@@ -309,11 +343,23 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
 
           {/* Details */}
           <Section icon={<FiInfo />} title="Details">
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="Name"   value={form?.name}  onChange={(v)=>setForm(f=>({...f,name:v}))}/>
               <Input label="Phone"  value={form?.phone} onChange={(v)=>setForm(f=>({...f,phone:v}))} placeholder="+351 …"/>
-              <Input label="Email"  value={form?.email} onChange={(v)=>setForm(f=>({...f,email:v}))}/>
-              <Input label="Source" value={form?.source} onChange={(v)=>setForm(f=>({...f,source:v}))} placeholder="https://…" />
+              <label className="text-sm">
+                <div className="text-slate-600 mb-1 inline-flex items-center gap-2"><FiTag className="text-slate-500"/>Source</div>
+                <select className="w-full rounded-lg px-3 py-2 text-sm border border-slate-200 focus:outline-none focus:ring-2 focus:ring-accent/60" value={form?.source||''} onChange={(e)=> setForm(f=>({...f, source:e.target.value}))}>
+                  <option value="">Select…</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="stand_virtual">Stand Virtual</option>
+                  <option value="piscapisca">PiscaPisca</option>
+                  <option value="website">Website</option>
+                  <option value="facebook">Facebook</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <Input label="Source URL" value={form?.source_url} onChange={(v)=> setForm(f=>({...f, source_url:v}))} placeholder="https://…" />
               <Input label="Plate"  value={form?.plate} onChange={(v)=>setForm(f=>({...f,plate:v}))}/>
             </div>
           </Section>
@@ -471,6 +517,8 @@ export default function LeadDrawer({ open, lead, onClose, onChanged }) {
           onChanged?.('task_create');
         }}
       />
+      {/* Reminder wizard */}
+      <CalendarWizard open={reminderWizardOpen} onClose={()=> setReminderWizardOpen(false)} initialType="reminder" onCreated={()=> setReminderWizardOpen(false)} />
     </div>
   );
 }

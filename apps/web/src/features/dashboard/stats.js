@@ -61,7 +61,8 @@ export async function fetchStats() {
 
   // 5) ACTIVE LEADS (exclude closed outcomes like won/lost/archived)
   // Active leads (simple heuristic: not deleted)
-  const activeLeads = await safeCount("leads", (q) => q.eq("org_id", orgId).is("deleted_at", null));
+  // Treat active as not archived (schema uses boolean archived)
+  const activeLeads = await safeCount("leads", (q) => q.eq("org_id", orgId).eq("archived", false));
 
   return { totalLeads, newLeads, inventory, activities7d, activeLeads };
 }

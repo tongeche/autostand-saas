@@ -3,6 +3,8 @@ import { supabase } from "../../../lib/supabase";
 import { getTenantId } from "../../../lib/tenant";
 import LeadCard from "../components/LeadCard";
 import LeadDrawer from "../components/LeadDrawer";
+import LeadsKanbanBoard from "../components/LeadsKanbanBoard.jsx";
+import LeadsTimelineView from "../components/LeadsTimelineView.jsx";
 import AddLeadWizard from "../components/AddLeadWizard.jsx";
 import {
   FiRefreshCw,
@@ -22,6 +24,7 @@ export default function LeadsPage() {
 
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
+  const [view, setView] = useState('cards'); // cards | kanban | timeline
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
@@ -47,7 +50,9 @@ export default function LeadsPage() {
         .eq("org_id", tenantId)
         .eq("archived", false);
 
-      if (status && status !== "all") query = query.eq("status", status);
+      // In kanban view we fetch all statuses so we can group client-side
+      const effectiveStatus = view === 'kanban' ? 'all' : status;
+      if (effectiveStatus && effectiveStatus !== "all") query = query.eq("status", effectiveStatus);
 
       if (q.trim()) {
         const term = q.trim();
@@ -94,7 +99,7 @@ export default function LeadsPage() {
   useEffect(() => {
     load({ resetPage: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, [status, view]);
 
   function openDrawer(lead) {
     setSelected(lead);
@@ -175,18 +180,42 @@ export default function LeadsPage() {
         </div>
       )}
 
-      {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {rows.map((lead) => (
-          <LeadCard
-            key={lead.id}
-            lead={lead}
-            onView={openDrawer}        // single click opens drawer (LeadCard calls onView)
-            onEdit={openDrawer}        // edit icon also opens drawer
-            onAfterChange={onChanged}  // when actions occur, refresh page
-          />
-        ))}
+      {/* View toggle */}
+      <div className="flex items-center gap-2 text-sm">
+        <div className="inline-flex rounded-xl border overflow-hidden">
+          <button className={`px-3 py-1.5 ${view==='cards'?'bg-slate-900 text-white':''}`} onClick={()=> setView('cards')}>Cards</button>
+          <button className={`px-3 py-1.5 ${view==='kanban'?'bg-slate-900 text-white':''}`} onClick={()=> setView('kanban')}>Kanban</button>
+          <button className={`px-3 py-1.5 ${view==='timeline'?'bg-slate-900 text-white':''}`} onClick={()=> setView('timeline')}>Timeline</button>
+        </div>
       </div>
+
+      {view==='cards' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {rows.map((lead) => (
+            <LeadCard
+              key={lead.id}
+              lead={lead}
+              onView={openDrawer}
+              onEdit={openDrawer}
+              onAfterChange={onChanged}
+            />
+          ))}
+        </div>
+      )}
+
+      {view==='kanban' && (
+        <LeadsKanbanBoard leads={rows} onMove={async (id, toStatus)=>{
+          try{
+            const { data, error } = await supabase.from('leads').update({ status: toStatus }).eq('id', id).select().single();
+            if (error) throw error;
+            setRows(prev => prev.map(l => l.id===id ? { ...l, status: toStatus, updated_at: new Date().toISOString() } : l));
+          }catch(e){ alert(e?.message || 'Failed to move lead'); }
+        }} />
+      )}
+
+      {view==='timeline' && (
+        <LeadsTimelineView leads={rows} />
+      )}
 
       {/* Pagination */}
       <div className="flex items-center justify-between pt-2">

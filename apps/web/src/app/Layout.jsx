@@ -10,6 +10,7 @@ import FindAssetModal from "../features/inventory/components/FindAssetModal.jsx"
 import { supabase } from "../lib/supabase";
 import { useSupabaseSession } from "../lib/auth";
 import { listDeliverable, markRead } from "../features/notifications/services/notifications";
+import NotificationDrawer from "../features/notifications/components/NotificationDrawer.jsx";
 
 /** CONFIG */
 const DEBUG = false; // flip to true to see mode/open badges in the topbar
@@ -35,6 +36,7 @@ function useIsDesktop() {
 }
 
 export default function Layout() {
+  const NOTIFS_ENABLED = true; // push disabled elsewhere; in-app notifications stay on
   const isDesktop = useIsDesktop();
   const navigate = useNavigate();
 
@@ -138,6 +140,7 @@ export default function Layout() {
 
   // Poll deliverable notifications while logged in
   useEffect(()=>{
+    if (!NOTIFS_ENABLED) return;
     let timer;
     async function load(){
       try { const rows = await listDeliverable({ onlyUnread:true, limit:20 }); setNotifs(rows); } catch {}
@@ -145,6 +148,16 @@ export default function Layout() {
     if (session){ load(); timer = setInterval(load, 30000); }
     return ()=> timer && clearInterval(timer);
   }, [session]);
+
+  // Refresh notifications when drawer mutates them
+  useEffect(()=>{
+    if (!NOTIFS_ENABLED) return;
+    const onChange = async () => {
+      try { const rows = await listDeliverable({ onlyUnread:true, limit:20 }); setNotifs(rows); } catch {}
+    };
+    window.addEventListener('autostand:notifs:changed', onChange);
+    return ()=> window.removeEventListener('autostand:notifs:changed', onChange);
+  }, []);
 
   // Close the plus dropdown on outside click / escape
   useEffect(() => {
@@ -248,34 +261,14 @@ export default function Layout() {
                 </span>
               )}
               {/* Notifications bell */}
-              <div className="relative">
-                <button className="icon-btn min-h-[40px] relative" onClick={()=> setNotifOpen(v=>!v)} aria-label="Notifications">
-                  <FiBell/>
-                  {notifs.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-[10px] px-1">{notifs.length}</span>}
-                </button>
-                {notifOpen && (
-                  <div className="absolute right-0 mt-2 w-80 rounded-2xl shadow-xl z-50 overflow-hidden" style={{ background: 'linear-gradient(180deg, rgba(183,224,195,.25) 0%, rgba(255,255,255,.95) 22%, rgba(255,255,255,1) 100%)' }}>
-                    <div className="px-3 py-2 text-sm font-semibold text-primary bg-white/60 border-b">Notifications</div>
-                    <div className="max-h-72 overflow-auto p-2">
-                      {(notifs||[]).length === 0 ? (
-                        <div className="px-2 py-4 text-sm text-slate-500">No new notifications</div>
-                      ) : (notifs.map(n => {
-                        const tone = notifTone(n?.title||'');
-                        return (
-                          <div key={n.id} className={`px-2 py-2 rounded-xl mb-1 ${tone.bg} ${tone.fg} flex items-start justify-between`}>
-                            <div className="min-w-0 pr-2">
-                              <div className="text-sm font-medium truncate">{n.title}</div>
-                              {n.body && <div className="text-xs opacity-80 truncate">{n.body}</div>}
-                              <div className="mt-1 text-[11px] opacity-70">{new Date(n.deliver_at).toLocaleString()}</div>
-                            </div>
-                            <button className={`text-xs underline ${tone.link}`} onClick={async()=>{ await markRead(n.id); setNotifs(prev => prev.filter(x=> x.id !== n.id)); }}>Mark read</button>
-                          </div>
-                        );
-                      }))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              {NOTIFS_ENABLED && (
+                <div className="relative">
+                  <button className="icon-btn min-h-[40px] relative" onClick={()=> setNotifOpen(true)} aria-label="Notifications">
+                    <FiBell/>
+                    {notifs.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-[10px] px-1">{notifs.length}</span>}
+                  </button>
+                </div>
+              )}
               <div className="relative" ref={plusRef}>
                 <button className="icon-btn min-h-[40px]" onClick={()=> setPlusOpen(v=>!v)} aria-label="Quick actions"><FiPlusCircle/></button>
                 {plusOpen && (
@@ -334,6 +327,8 @@ export default function Layout() {
             </div>
           </div>
         </header>
+
+        <NotificationDrawer open={NOTIFS_ENABLED && notifOpen} onClose={()=> setNotifOpen(false)} />
 
         {/* Content with max width on large screens */}
         <main className="p-3 md:p-6">
@@ -420,7 +415,9 @@ function SidebarNav({ open, onNavigate }) {
         <Item to="/todos" icon={<FiCheckSquare />} label="Tasks" open={open} onClick={onNavigate} />
         <Item to="/inventory" icon={<FiBox />} label="Inventory" open={open} onClick={onNavigate} />
         <Item to="/calendar" icon={<FiCalendar />} label="Calendar" open={open} onClick={onNavigate} />
-        <Item to="/wall" icon={<FiFileText />} label="Documents" open={open} onClick={onNavigate} />
+        <Item to="/crm" icon={<FiGrid />} label="CRM" open={open} onClick={onNavigate} />
+        <Item to="/templates" icon={<FiFileText />} label="Templates" open={open} onClick={onNavigate} />
+        <Item to="/backend" icon={<FiSettings />} label="Backend" open={open} onClick={onNavigate} />
         <Item to="/settings" icon={<FiSettings />} label="Settings" open={open} onClick={onNavigate} />
       </nav>
     </>

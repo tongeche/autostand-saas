@@ -14,24 +14,40 @@
 
 import webpush from "web-push";
 
-const {
-  VAPID_PUBLIC_KEY,
-  VAPID_PRIVATE_KEY,
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY,
-} = process.env;
+// Lazy configuration so OPTIONS health checks don't 500 when env is missing
+let CFG: {
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  SUPABASE_URL?: string;
+  SUPABASE_SERVICE_ROLE_KEY?: string;
+  READY?: boolean;
+} = { READY: false };
 
-// Fail fast if misconfigured
-requireEnv("VAPID_PUBLIC_KEY", VAPID_PUBLIC_KEY);
-requireEnv("VAPID_PRIVATE_KEY", VAPID_PRIVATE_KEY);
-requireEnv("SUPABASE_URL", SUPABASE_URL);
-requireEnv("SUPABASE_SERVICE_ROLE_KEY", SUPABASE_SERVICE_ROLE_KEY);
-
-webpush.setVapidDetails(
-  "mailto:ops@yourdomain",
-  VAPID_PUBLIC_KEY as string,
-  VAPID_PRIVATE_KEY as string
-);
+function ensureConfigured(){
+  if (CFG.READY) return;
+  const {
+    VAPID_PUBLIC_KEY,
+    VAPID_PRIVATE_KEY,
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY,
+  } = process.env as Record<string, string | undefined>;
+  requireEnv("VAPID_PUBLIC_KEY", VAPID_PUBLIC_KEY);
+  requireEnv("VAPID_PRIVATE_KEY", VAPID_PRIVATE_KEY);
+  requireEnv("SUPABASE_URL", SUPABASE_URL);
+  requireEnv("SUPABASE_SERVICE_ROLE_KEY", SUPABASE_SERVICE_ROLE_KEY);
+  webpush.setVapidDetails(
+    "mailto:ops@yourdomain",
+    VAPID_PUBLIC_KEY as string,
+    VAPID_PRIVATE_KEY as string
+  );
+  CFG = {
+    VAPID_PUBLIC_KEY,
+    VAPID_PRIVATE_KEY,
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY,
+    READY: true,
+  };
+}
 
 type Json = Record<string, unknown>;
 interface PushAction { action: string; title: string; icon?: string }
@@ -51,6 +67,7 @@ export const handler = async (event: any) => {
   if (event.httpMethod !== "POST")    return json(405, { error: "Method Not Allowed" }, headers);
 
   try {
+    ensureConfigured();
     const body = parseJson<ReqBody>(event.body);
     if (!body?.user_id) return json(400, { error: "user_id is required" }, headers);
     if (!body?.payload) return json(400, { error: "payload is required" }, headers);
@@ -122,8 +139,8 @@ function normalizePayload(p: PushPayload): Required<PushPayload> {
 
 function supaHeaders(extra?: Record<string,string>) {
   return {
-    apikey: SUPABASE_SERVICE_ROLE_KEY as string,
-    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    apikey: CFG.SUPABASE_SERVICE_ROLE_KEY as string,
+    Authorization: `Bearer ${CFG.SUPABASE_SERVICE_ROLE_KEY}`,
     Accept: "application/json",
     "Content-Type": "application/json",
     ...(extra || {}),
@@ -132,7 +149,7 @@ function supaHeaders(extra?: Record<string,string>) {
 
 async function fetchSubscriptions(userIds: string[], orgId?: string) {
   const inList = userIds.map(encodeURIComponent).join(",");
-  let url = `${SUPABASE_URL}/rest/v1/push_subscriptions?user_id=in.(${inList})`;
+  let url = `${CFG.SUPABASE_URL}/rest/v1/push_subscriptions?user_id=in.(${inList})`;
   if (orgId) url += `&org_id=eq.${encodeURIComponent(orgId)}`;
   const r = await fetch(url, { headers: supaHeaders() });
   if (!r.ok) throw new Error(`Supabase get subs ${r.status}: ${await r.text()}`);
@@ -142,7 +159,7 @@ async function fetchSubscriptions(userIds: string[], orgId?: string) {
 async function deleteByEndpoints(endpoints: string[]) {
   const encoded = endpoints.map(encodeURIComponent).join(",");
   const r = await fetch(
-    `${SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=in.(${encoded})`,
+    `${CFG.SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=in.(${encoded})`,
     { method: "DELETE", headers: supaHeaders({ Prefer: "return=minimal" }) }
   );
   if (!r.ok) {

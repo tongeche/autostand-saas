@@ -8,6 +8,13 @@
   NODE_VERSION = "20"
   NETLIFY_USE_PNPM = "true"
 
+# Local dev: run Vite and functions together
+[dev]
+  command    = "pnpm -C apps/web dev"
+  targetPort = 5173
+  port       = 8888
+  functions  = "apps/api/src"
+
 # functions proxy (if you use them)
 [[redirects]]
   from = "/api/*"
