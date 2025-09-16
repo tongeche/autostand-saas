@@ -1,4 +1,17 @@
 import { useEffect, useState } from "react";
+import React from "react";
+function Modal({ open, onClose, title, children }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-lg shadow-lg max-w-lg w-full p-6 relative">
+        <button className="absolute top-2 right-2 text-xl" onClick={onClose}>&times;</button>
+        <div className="font-semibold mb-2">{title}</div>
+        <div className="whitespace-pre-wrap break-words text-sm">{children}</div>
+      </div>
+    </div>
+  );
+}
 import { useNavigate } from "react-router-dom";
 import {
   FiUsers,
@@ -60,15 +73,22 @@ function Panel({ title, action, children }) {
   );
 }
 function ListItem({ text, tag }) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const truncated = (text && text.length > 40) ? text.slice(0, 40) + '…' : text;
   return (
-    <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 hover:bg-slate-100">
-      <div className="text-sm">{text}</div>
-      {tag && (
-        <span className="text-xs px-2 py-1 rounded-full bg-accent/50 text-primary">
-          {tag}
-        </span>
-      )}
-    </div>
+    <>
+      <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 hover:bg-slate-100">
+        <button className="text-sm truncate text-left w-full" style={{background:'none',border:'none',padding:0}} onDoubleClick={()=> setModalOpen(true)} title={text}>{truncated}</button>
+        {tag && (
+          <span className="text-xs px-2 py-1 rounded-full bg-accent/50 text-primary">
+            {tag}
+          </span>
+        )}
+      </div>
+      <Modal open={modalOpen} onClose={()=> setModalOpen(false)} title="Details">
+        {text}
+      </Modal>
+    </>
   );
 }
 function Task({ text, right }) {
@@ -84,6 +104,7 @@ function Task({ text, right }) {
 }
 
 function InlineTaskRow({ task, onChange, onToggleDone, onDelete }){
+  const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null); // null | 'title' | 'due'
   const [title, setTitle] = useState(task?.title||'');
   const [due, setDue] = useState(task?.due_date || '');
@@ -103,62 +124,70 @@ function InlineTaskRow({ task, onChange, onToggleDone, onDelete }){
     if (e.key === 'Escape') { e.preventDefault(); cancelFn(); }
   };
 
+  // Truncate text to 40 chars
+  const truncated = (task.title && task.title.length > 40) ? task.title.slice(0, 40) + '…' : task.title;
   return (
-    <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 hover:bg-slate-100">
-      <div className="flex items-center gap-3 min-w-0">
-        <input
-          type="checkbox"
-          className="accent-[var(--color-primary)]"
-          checked={task.status==='done' || task.done}
-          onChange={(e)=> onToggleDone?.(e.target.checked)}
-          onClick={(e)=> e.stopPropagation()}
-        />
-        <div className="min-w-0">
-          {editing === 'title' ? (
+    <>
+      <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 hover:bg-slate-100">
+        <div className="flex items-center gap-3 min-w-0">
+          <input
+            type="checkbox"
+            className="accent-[var(--color-primary)]"
+            checked={task.status==='done' || task.done}
+            onChange={(e)=> onToggleDone?.(e.target.checked)}
+            onClick={(e)=> e.stopPropagation()}
+          />
+          <div className="min-w-0">
+            {editing === 'title' ? (
+              <div className="flex items-center gap-2">
+                <input
+                  className="text-sm bg-white rounded border px-2 py-1 w-56"
+                  value={title}
+                  autoFocus
+                  onChange={(e)=> setTitle(e.target.value)}
+                  onKeyDown={(e)=> onKey(e, saveTitle, ()=>{ setTitle(task.title||''); setEditing(null); })}
+                  onClick={(e)=> e.stopPropagation()}
+                />
+                <button className="text-xs px-2 py-1 rounded border" onClick={(e)=>{ e.stopPropagation(); setTitle(task.title||''); setEditing(null); }}>Cancel</button>
+                <button className="text-xs px-2 py-1 rounded bg-gray-900 text-white" onClick={(e)=>{ e.stopPropagation(); saveTitle(); }}>Save</button>
+              </div>
+            ) : (
+              <button className="text-left text-sm truncate" onClick={()=> setEditing('title')} title="Edit title" onDoubleClick={()=> setModalOpen(true)}>{truncated || '(untitled)'}</button>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {editing === 'due' ? (
             <div className="flex items-center gap-2">
               <input
-                className="text-sm bg-white rounded border px-2 py-1 w-56"
-                value={title}
+                type="date"
+                className="text-xs bg-white rounded border px-2 py-1"
+                value={due||''}
                 autoFocus
-                onChange={(e)=> setTitle(e.target.value)}
-                onKeyDown={(e)=> onKey(e, saveTitle, ()=>{ setTitle(task.title||''); setEditing(null); })}
+                onChange={(e)=> setDue(e.target.value)}
+                onKeyDown={(e)=> onKey(e, saveDue, ()=>{ setDue(task.due_date||''); setEditing(null); })}
                 onClick={(e)=> e.stopPropagation()}
               />
-              <button className="text-xs px-2 py-1 rounded border" onClick={(e)=>{ e.stopPropagation(); setTitle(task.title||''); setEditing(null); }}>Cancel</button>
-              <button className="text-xs px-2 py-1 rounded bg-gray-900 text-white" onClick={(e)=>{ e.stopPropagation(); saveTitle(); }}>Save</button>
+              <button className="text-xs px-2 py-1 rounded border" onClick={(e)=>{ e.stopPropagation(); setDue(task.due_date||''); setEditing(null); }}>Cancel</button>
+              <button className="text-xs px-2 py-1 rounded bg-gray-900 text-white" onClick={(e)=>{ e.stopPropagation(); saveDue(); }}>Save</button>
             </div>
           ) : (
-            <button className="text-left text-sm truncate" onClick={()=> setEditing('title')} title="Edit title">{task.title || '(untitled)'}</button>
+            <button className="text-xs text-slate-600" onClick={()=> setEditing('due')} title="Edit due date">{task.due_date ? formatShortDate(task.due_date) : '—'}</button>
           )}
+          <button className="text-xs px-2 py-1 rounded border border-red-200 text-red-700" onClick={(e)=>{ e.stopPropagation(); onDelete?.(); }}>Delete</button>
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        {editing === 'due' ? (
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              className="text-xs bg-white rounded border px-2 py-1"
-              value={due||''}
-              autoFocus
-              onChange={(e)=> setDue(e.target.value)}
-              onKeyDown={(e)=> onKey(e, saveDue, ()=>{ setDue(task.due_date||''); setEditing(null); })}
-              onClick={(e)=> e.stopPropagation()}
-            />
-            <button className="text-xs px-2 py-1 rounded border" onClick={(e)=>{ e.stopPropagation(); setDue(task.due_date||''); setEditing(null); }}>Cancel</button>
-            <button className="text-xs px-2 py-1 rounded bg-gray-900 text-white" onClick={(e)=>{ e.stopPropagation(); saveDue(); }}>Save</button>
-          </div>
-        ) : (
-          <button className="text-xs text-slate-600" onClick={()=> setEditing('due')} title="Edit due date">{task.due_date ? formatShortDate(task.due_date) : '—'}</button>
-        )}
-        <button className="text-xs px-2 py-1 rounded border border-red-200 text-red-700" onClick={(e)=>{ e.stopPropagation(); onDelete?.(); }}>Delete</button>
-      </div>
-    </div>
+      <Modal open={modalOpen} onClose={()=> setModalOpen(false)} title="Task Details">
+        {task.title}
+      </Modal>
+    </>
   );
 }
 
 function toLocalInput(dt){ try{ const d=new Date(dt); const p=(n)=> String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }catch{return ''} }
 
 function InlineReminderRow({ notif, onChange, onDelete, onDone }){
+  const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null); // null | 'title' | 'time'
   const [title, setTitle] = useState(notif?.title||'');
   const [time, setTime] = useState(()=> toLocalInput(notif.deliver_at)); // local input datetime-local value
@@ -168,33 +197,40 @@ function InlineReminderRow({ notif, onChange, onDelete, onDone }){
   const saveTime = async ()=>{ const dt = time ? new Date(time) : new Date(notif.deliver_at); await onChange?.({ deliver_at: dt }); setEditing(null); };
   const onKey = (e, saveFn, cancelFn)=>{ if (e.key==='Enter'){ e.preventDefault(); saveFn(); } if (e.key==='Escape'){ e.preventDefault(); cancelFn(); } };
 
+  // Truncate text to 40 chars
+  const truncated = (notif.title && notif.title.length > 40) ? notif.title.slice(0, 40) + '…' : notif.title;
   return (
-    <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 hover:bg-slate-100">
-      <div className="text-sm truncate min-w-0">
-        {editing === 'title' ? (
-          <div className="flex items-center gap-2">
-            <input className="text-sm bg-white rounded border px-2 py-1 w-48" value={title} autoFocus onChange={(e)=> setTitle(e.target.value)} onKeyDown={(e)=> onKey(e, saveTitle, ()=>{ setTitle(notif.title||''); setEditing(null); })} onClick={(e)=> e.stopPropagation()} />
-            <button className="text-xs px-2 py-1 rounded border" onClick={(e)=>{ e.stopPropagation(); setTitle(notif.title||''); setEditing(null); }}>Cancel</button>
-            <button className="text-xs px-2 py-1 rounded bg-gray-900 text-white" onClick={(e)=>{ e.stopPropagation(); saveTitle(); }}>Save</button>
-          </div>
-        ) : (
-          <button className="truncate" onClick={()=> setEditing('title')} title="Edit title">{notif.title}</button>
-        )}
+    <>
+      <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 hover:bg-slate-100">
+        <div className="text-sm truncate min-w-0">
+          {editing === 'title' ? (
+            <div className="flex items-center gap-2">
+              <input className="text-sm bg-white rounded border px-2 py-1 w-48" value={title} autoFocus onChange={(e)=> setTitle(e.target.value)} onKeyDown={(e)=> onKey(e, saveTitle, ()=>{ setTitle(notif.title||''); setEditing(null); })} onClick={(e)=> e.stopPropagation()} />
+              <button className="text-xs px-2 py-1 rounded border" onClick={(e)=>{ e.stopPropagation(); setTitle(notif.title||''); setEditing(null); }}>Cancel</button>
+              <button className="text-xs px-2 py-1 rounded bg-gray-900 text-white" onClick={(e)=>{ e.stopPropagation(); saveTitle(); }}>Save</button>
+            </div>
+          ) : (
+            <button className="truncate" onClick={()=> setEditing('title')} title="Edit title" onDoubleClick={()=> setModalOpen(true)}>{truncated}</button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {editing === 'time' ? (
+            <div className="flex items-center gap-2">
+              <input type="datetime-local" className="text-xs bg-white rounded border px-2 py-1" value={time} autoFocus onChange={(e)=> setTime(e.target.value)} onKeyDown={(e)=> onKey(e, saveTime, ()=>{ setTime(toLocalInput(notif.deliver_at)); setEditing(null); })} onClick={(e)=> e.stopPropagation()} />
+              <button className="text-xs px-2 py-1 rounded border" onClick={(e)=>{ e.stopPropagation(); setTime(toLocalInput(notif.deliver_at)); setEditing(null); }}>Cancel</button>
+              <button className="text-xs px-2 py-1 rounded bg-gray-900 text-white" onClick={(e)=>{ e.stopPropagation(); saveTime(); }}>Save</button>
+            </div>
+          ) : (
+            <button className="text-xs text-slate-600" onClick={()=> setEditing('time')} title="Edit time">{new Date(notif.deliver_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}</button>
+          )}
+          <button className="text-xs underline" onClick={(e)=>{ e.stopPropagation(); onDone?.(); }}>Done</button>
+          <button className="text-xs px-2 py-1 rounded border border-red-200 text-red-700" onClick={(e)=>{ e.stopPropagation(); onDelete?.(); }}>Delete</button>
+        </div>
       </div>
-      <div className="flex items-center gap-2">
-        {editing === 'time' ? (
-          <div className="flex items-center gap-2">
-            <input type="datetime-local" className="text-xs bg-white rounded border px-2 py-1" value={time} autoFocus onChange={(e)=> setTime(e.target.value)} onKeyDown={(e)=> onKey(e, saveTime, ()=>{ setTime(toLocalInput(notif.deliver_at)); setEditing(null); })} onClick={(e)=> e.stopPropagation()} />
-            <button className="text-xs px-2 py-1 rounded border" onClick={(e)=>{ e.stopPropagation(); setTime(toLocalInput(notif.deliver_at)); setEditing(null); }}>Cancel</button>
-            <button className="text-xs px-2 py-1 rounded bg-gray-900 text-white" onClick={(e)=>{ e.stopPropagation(); saveTime(); }}>Save</button>
-          </div>
-        ) : (
-          <button className="text-xs text-slate-600" onClick={()=> setEditing('time')} title="Edit time">{new Date(notif.deliver_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}</button>
-        )}
-        <button className="text-xs underline" onClick={(e)=>{ e.stopPropagation(); onDone?.(); }}>Done</button>
-        <button className="text-xs px-2 py-1 rounded border border-red-200 text-red-700" onClick={(e)=>{ e.stopPropagation(); onDelete?.(); }}>Delete</button>
-      </div>
-    </div>
+      <Modal open={modalOpen} onClose={()=> setModalOpen(false)} title="Reminder Details">
+        {notif.title}
+      </Modal>
+    </>
   );
 }
 
