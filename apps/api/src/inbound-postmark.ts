@@ -54,7 +54,9 @@ export const handler = async (event: any) => {
       const upd = await updateLead(SUPABASE_URL as string, SUPABASE_SERVICE_ROLE_KEY as string, existing.id, { name, source: 'postmark-inbound', meta });
       lead_id = upd.id;
     } else {
-      const ins = await createLead(SUPABASE_URL as string, SUPABASE_SERVICE_ROLE_KEY as string, { org_id, tenant_id, email, name, source: 'postmark-inbound', meta });
+      // Generate a UUID for the new lead
+      const lead_uuid = generateUUID();
+      const ins = await createLead(SUPABASE_URL as string, SUPABASE_SERVICE_ROLE_KEY as string, { id: lead_uuid, org_id, tenant_id, email, name, source: 'postmark-inbound', meta });
       lead_id = ins.id;
     }
 
@@ -69,6 +71,14 @@ export const handler = async (event: any) => {
 };
 
 // ---------- helpers ----------
+// Simple UUID v4 generator
+function generateUUID() {
+  // https://stackoverflow.com/a/2117523/65387
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
 
 function corsHeaders(){
   return {
