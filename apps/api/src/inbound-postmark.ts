@@ -37,6 +37,18 @@ export const handler = async (event: any) => {
     const date = parsed?.Date || new Date().toISOString();
     const bodyText = String(parsed?.TextBody || '') || stripHtml(String(parsed?.HtmlBody || ''));
 
+    // Extract fields from bodyText
+    function extractField(label: string) {
+      const regex = new RegExp(label + '\\s*:?\\s*(.+)', 'i');
+      const match = bodyText.match(regex);
+      return match ? match[1].split('\n')[0].trim() : '';
+    }
+
+    const plate = extractField('Matrícula da viatura');
+    const source_url = extractField('URL do Anúncio');
+    const notes = extractField('Mensagem');
+    const phone = bodyText.match(/\b\d{9,}\b/)?.[0] || '';
+
     // Extract customer email from body; fallback to From
     const email = extractEmailFromBody(bodyText) || from;
     if (!email) return json(400, { error: 'No email found' });
@@ -51,17 +63,38 @@ export const handler = async (event: any) => {
     const existing = await getLeadByEmail(SUPABASE_URL as string, SUPABASE_SERVICE_ROLE_KEY as string, org_id, email);
     let lead_id: string;
     if (existing?.id) {
-      const upd = await updateLead(SUPABASE_URL as string, SUPABASE_SERVICE_ROLE_KEY as string, existing.id, { name, source: 'postmark-inbound', meta });
+      const upd = await updateLead(SUPABASE_URL as string, SUPABASE_SERVICE_ROLE_KEY as string, existing.id, {
+        name,
+        source: source_url || 'postmark-inbound',
+        plate,
+        phone,
+        meta
+      });
       lead_id = upd.id;
     } else {
       // Generate a UUID for the new lead
       const lead_uuid = generateUUID();
-      const ins = await createLead(SUPABASE_URL as string, SUPABASE_SERVICE_ROLE_KEY as string, { id: lead_uuid, org_id, tenant_id, email, name, source: 'postmark-inbound', meta });
+      const ins = await createLead(SUPABASE_URL as string, SUPABASE_SERVICE_ROLE_KEY as string, {
+        id: lead_uuid,
+        org_id,
+        tenant_id,
+        email,
+        name,
+        source: source_url || 'postmark-inbound',
+        plate,
+        phone,
+        meta
+      });
       lead_id = ins.id;
     }
 
-    // Insert note with full body
-    await insertLeadNote(SUPABASE_URL as string, SUPABASE_SERVICE_ROLE_KEY as string, { org_id, tenant_id, lead_id, body: bodyText });
+    // Insert note with extracted notes
+    await insertLeadNote(SUPABASE_URL as string, SUPABASE_SERVICE_ROLE_KEY as string, {
+      org_id,
+      tenant_id,
+      lead_id,
+      body: notes
+    });
 
     return json(200, { ok: true, lead_id });
   }catch(e:any){
